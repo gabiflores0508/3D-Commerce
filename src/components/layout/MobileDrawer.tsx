@@ -105,7 +105,7 @@ export function MobileDrawer() {
 
         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-ink-mute">Categorias</p>
         <div className="mb-6 grid grid-cols-2 gap-2">
-          {categories.filter((c) => c.showInMenu).map((c) => (
+          {categories.filter((c) => c.showInMenu).sort((a, b) => a.order - b.order).map((c) => (
             <Link
               key={c.id}
               to={`/categoria/${c.slug}`}

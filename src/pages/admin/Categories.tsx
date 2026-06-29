@@ -5,6 +5,7 @@ import { Edit, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { ImageUploader } from '@/components/admin/ImageUploader';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import type { Category } from '@/types';
 import { useSEO } from '@/utils/seo';
@@ -41,7 +42,8 @@ export default function Categories() {
       addCategory(payload);
       toast.success('Categoria criada');
     }
-    setEditing(null);
+    // Mantém o modal aberto após salvar; o usuário fecha em "Concluir".
+    setEditing(payload);
   }
 
   function remove(id: string) {
@@ -124,6 +126,14 @@ export default function Categories() {
               <Label>Descrição</Label>
               <Textarea value={editing.description ?? ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={3} />
             </div>
+            <div>
+              <Label>Imagem da categoria (opcional)</Label>
+              <ImageUploader
+                value={editing.image ?? ''}
+                onChange={(next) => setEditing({ ...editing, image: next })}
+                hint="Aparece no card da categoria na home. Sem imagem, usa o estilo de cor padrão."
+              />
+            </div>
             <div className="flex gap-4 text-sm">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={editing.showInMenu} onChange={(e) => setEditing({ ...editing, showInMenu: e.target.checked })} className="accent-ink" />
@@ -135,7 +145,7 @@ export default function Categories() {
               </label>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button>
+              <Button variant="secondary" onClick={() => setEditing(null)}>Fechar</Button>
               <Button onClick={save}>Salvar</Button>
             </div>
           </div>

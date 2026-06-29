@@ -6,7 +6,7 @@ import { Input, Label, Select, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { ImageUploader } from '@/components/admin/ImageUploader';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
-import type { Banner } from '@/types';
+import type { Banner, HeroBadge } from '@/types';
 import { useSEO } from '@/utils/seo';
 
 export default function Banners() {
@@ -31,6 +31,14 @@ export default function Banners() {
     });
   }
 
+  const emptyBadge: HeroBadge = { enabled: true, tag: '', title: '', info: '' };
+
+  function updateBadge(side: 'badgeLeft' | 'badgeRight', patch: Partial<HeroBadge>) {
+    if (!editing) return;
+    const current = editing[side] ?? emptyBadge;
+    setEditing({ ...editing, [side]: { ...current, ...patch } });
+  }
+
   function save() {
     if (!editing) return;
     if (banners.find((b) => b.id === editing.id)) {
@@ -40,7 +48,7 @@ export default function Banners() {
       addBanner(editing);
       toast.success('Banner criado');
     }
-    setEditing(null);
+    // Mantém o modal aberto após salvar; o usuário fecha em "Fechar".
   }
 
   return (
@@ -132,12 +140,41 @@ export default function Banners() {
                 hint="Sobrepõe o gradiente quando preenchida. Upload demonstrativo, salvo no navegador."
               />
             </div>
+            {editing.position === 'hero' && (
+              <div className="space-y-3 rounded-xl border border-ink-line p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Selos sobre a imagem (Hero)</p>
+                {(['badgeLeft', 'badgeRight'] as const).map((side) => {
+                  const badge = editing[side] ?? emptyBadge;
+                  return (
+                    <div key={side} className="rounded-lg bg-bg-soft p-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={badge.enabled}
+                          onChange={(e) => updateBadge(side, { enabled: e.target.checked })}
+                          className="accent-ink"
+                        />
+                        {side === 'badgeLeft' ? 'Selo esquerdo' : 'Selo direito'}
+                      </label>
+                      {badge.enabled && (
+                        <div className="mt-2 grid grid-cols-3 gap-2">
+                          <Input placeholder="Tag (ex.: + Vendido)" value={badge.tag} onChange={(e) => updateBadge(side, { tag: e.target.value })} />
+                          <Input placeholder="Título (ex.: PLA Preto 1kg)" value={badge.title} onChange={(e) => updateBadge(side, { title: e.target.value })} />
+                          <Input placeholder="Info (ex.: R$ 109,90)" value={badge.info} onChange={(e) => updateBadge(side, { info: e.target.value })} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="text-[11px] text-ink-mute">Deixe um selo desmarcado para removê-lo da home.</p>
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} className="accent-ink" />
               Ativo
             </label>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button>
+              <Button variant="secondary" onClick={() => setEditing(null)}>Fechar</Button>
               <Button onClick={save}>Salvar</Button>
             </div>
           </div>

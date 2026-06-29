@@ -65,9 +65,11 @@ export function ProductCard({ product }: { product: Product }) {
         </Link>
 
         <div className="mt-3 space-y-0.5">
-          {product.promoPrice && (
-            <p className="text-xs text-ink-mute line-through tabular-nums">{formatBRL(product.price)}</p>
-          )}
+          {/* Altura reservada para o preço riscado: mantém todos os cards alinhados,
+              tenham ou não preço promocional. */}
+          <p className="h-4 text-xs text-ink-mute line-through tabular-nums">
+            {product.promoPrice ? formatBRL(product.price) : ' '}
+          </p>
           <p className="price-display text-xl font-bold leading-none text-ink">{formatBRL(effective)}</p>
           <p className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -75,7 +77,7 @@ export function ProductCard({ product }: { product: Product }) {
           </p>
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-auto flex gap-2 pt-4">
           {isQuoteOnly ? (
             <a
               href={whatsappProduct(product)}

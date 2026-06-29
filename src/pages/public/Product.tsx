@@ -9,6 +9,8 @@ import { useUIStore } from '@/store/useUIStore';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ShowcaseSection } from '@/components/home/ShowcaseSection';
+import { Markdown } from '@/components/ui/Markdown';
+import { Collapsible } from '@/components/ui/Collapsible';
 import { formatBRL, getDiscountPercent, getEffectivePrice, getPixPrice, calcInstallment } from '@/utils/price';
 import { whatsappProduct } from '@/utils/whatsapp';
 import { useSEO } from '@/utils/seo';
@@ -63,8 +65,10 @@ export default function Product() {
   }
 
   function buyNow() {
-    addToCart();
-    setTimeout(() => navigate('/checkout'), 100);
+    if (isOutOfStock || isQuoteOnly) return;
+    // Compra direta: adiciona ao carrinho e vai para o checkout, sem abrir a gaveta lateral.
+    addItem(product!.id, qty, variation?.id, variation?.label);
+    navigate('/checkout');
   }
 
   return (
@@ -221,21 +225,25 @@ export default function Product() {
       </div>
 
       <section className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2 card p-6">
+        <div className={`card p-6 ${Object.keys(product.attributes).length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
           <h2 className="text-lg font-bold">Descrição do produto</h2>
-          <p className="mt-3 text-sm leading-relaxed text-ink-soft">{product.description}</p>
+          <Collapsible collapsedHeight={220}>
+            <Markdown content={product.description} className="mt-3" />
+          </Collapsible>
         </div>
-        <div className="card p-6">
-          <h2 className="text-lg font-bold">Especificações</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            {Object.entries(product.attributes).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 border-b border-ink-line/50 pb-1.5">
-                <dt className="text-ink-mute">{k}</dt>
-                <dd className="text-right font-medium text-ink">{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        {Object.keys(product.attributes).length > 0 && (
+          <div className="card p-6">
+            <h2 className="text-lg font-bold">Especificações</h2>
+            <dl className="mt-3 space-y-2 text-sm">
+              {Object.entries(product.attributes).map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-3 border-b border-ink-line/50 pb-1.5">
+                  <dt className="text-ink-mute">{k}</dt>
+                  <dd className="text-right font-medium text-ink">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
       </section>
 
       <ShowcaseSection eyebrow="Você também pode gostar" title="Produtos relacionados" products={related} />

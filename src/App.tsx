@@ -1,8 +1,30 @@
+import { useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { router } from '@/routes/AppRoutes';
+import { useAdminDataStore } from '@/store/useAdminDataStore';
 
 export default function App() {
+  const customLogo = useAdminDataStore((s) => s.settings.logo);
+
+  // Usa a logo do site como favicon. Se o admin enviou uma logo personalizada,
+  // o favicon passa a refletir essa logo; senão, mantém o favicon.svg padrão.
+  useEffect(() => {
+    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    if (customLogo) {
+      link.type = customLogo.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
+      link.href = customLogo;
+    } else {
+      link.type = 'image/svg+xml';
+      link.href = '/favicon.svg';
+    }
+  }, [customLogo]);
+
   return (
     <>
       <RouterProvider router={router} />

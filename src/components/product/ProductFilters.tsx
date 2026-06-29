@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import type { Product } from '@/types';
 import { Label } from '@/components/ui/Input';
 
+// Teto de preço: maxPrice neste valor significa "sem limite superior".
+export const MAX_PRICE = 100000;
+
 export interface FiltersState {
   q: string;
   categories: string[];
@@ -10,7 +13,6 @@ export interface FiltersState {
   minPrice: number;
   maxPrice: number;
   inStockOnly: boolean;
-  onlyOffer: boolean;
 }
 
 interface Props {
@@ -20,10 +22,6 @@ interface Props {
 }
 
 export function ProductFilters({ products, filters, setFilters }: Props) {
-  const materials = useMemo(
-    () => Array.from(new Set(products.map((p) => p.material).filter((m): m is NonNullable<typeof m> => Boolean(m) && m !== '-'))),
-    [products],
-  );
   const brands = useMemo(() => Array.from(new Set(products.map((p) => p.brand))), [products]);
 
   function toggle<K extends 'materials' | 'brands' | 'categories'>(field: K, value: string) {
@@ -34,23 +32,6 @@ export function ProductFilters({ products, filters, setFilters }: Props) {
 
   return (
     <aside className="space-y-6 rounded-2xl border border-ink-line bg-bg-card p-5">
-      <div>
-        <Label>Material</Label>
-        <div className="space-y-1.5">
-          {materials.map((m) => (
-            <label key={m} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={filters.materials.includes(m)}
-                onChange={() => toggle('materials', m)}
-                className="accent-ink"
-              />
-              {m}
-            </label>
-          ))}
-        </div>
-      </div>
-
       <div>
         <Label>Marca</Label>
         <div className="space-y-1.5">
@@ -70,18 +51,36 @@ export function ProductFilters({ products, filters, setFilters }: Props) {
 
       <div>
         <Label>Preço</Label>
-        <div className="space-y-2">
-          <input
-            type="range"
-            min={0}
-            max={5000}
-            step={50}
-            value={filters.maxPrice}
-            onChange={(e) => setFilters({ ...filters, maxPrice: Number(e.target.value) })}
-            className="w-full accent-ink"
-          />
-          <p className="text-xs text-ink-mute">Até R$ {filters.maxPrice}</p>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-mute">R$</span>
+            <input
+              type="number"
+              min={0}
+              step={10}
+              placeholder="Mín"
+              value={filters.minPrice || ''}
+              onChange={(e) => setFilters({ ...filters, minPrice: Number(e.target.value) || 0 })}
+              className="w-full rounded-xl border border-ink-line bg-white py-2 pl-8 pr-2 text-sm text-ink placeholder:text-ink-mute focus:border-ink focus:outline-none"
+            />
+          </div>
+          <span className="text-ink-mute">—</span>
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-mute">R$</span>
+            <input
+              type="number"
+              min={0}
+              step={10}
+              placeholder="Máx"
+              value={filters.maxPrice >= MAX_PRICE ? '' : filters.maxPrice}
+              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value === '' ? MAX_PRICE : Number(e.target.value) })}
+              className="w-full rounded-xl border border-ink-line bg-white py-2 pl-8 pr-2 text-sm text-ink placeholder:text-ink-mute focus:border-ink focus:outline-none"
+            />
+          </div>
         </div>
+        {filters.minPrice > 0 && filters.maxPrice < MAX_PRICE && filters.minPrice > filters.maxPrice && (
+          <p className="mt-1.5 text-xs text-rose-500">O valor mínimo deve ser menor que o máximo.</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -94,28 +93,19 @@ export function ProductFilters({ products, filters, setFilters }: Props) {
           />
           Apenas em estoque
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={filters.onlyOffer}
-            onChange={(e) => setFilters({ ...filters, onlyOffer: e.target.checked })}
-            className="accent-ink"
-          />
-          Apenas ofertas
-        </label>
       </div>
 
       <button
         onClick={() =>
+          // Mantém a categoria da rota ativa ao limpar; zera apenas os filtros secundários.
           setFilters({
+            ...filters,
             q: '',
-            categories: [],
             materials: [],
             brands: [],
             minPrice: 0,
-            maxPrice: 5000,
+            maxPrice: MAX_PRICE,
             inStockOnly: false,
-            onlyOffer: false,
           })
         }
         className="text-xs font-semibold text-ink-mute hover:text-ink underline"

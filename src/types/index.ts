@@ -53,6 +53,7 @@ export interface Category {
   name: string;
   description?: string;
   icon?: string;
+  image?: string;
   showInMenu: boolean;
   showInHome: boolean;
   order: number;
@@ -62,6 +63,14 @@ export interface Category {
   seasonalActive?: boolean;
   productIds?: string[];
   color?: string;
+}
+
+/** Selo flutuante exibido sobre a imagem do Hero (ex.: "+ Vendido"). */
+export interface HeroBadge {
+  enabled: boolean;
+  tag: string;    // ex.: "+ Vendido" / "Lançamento"
+  title: string;  // ex.: "PLA Preto 1kg"
+  info: string;   // ex.: "R$ 109,90" / "Suporte incluso"
 }
 
 export interface Banner {
@@ -76,6 +85,9 @@ export interface Banner {
   order: number;
   bgFrom?: string;
   bgTo?: string;
+  /** Selos flutuantes sobre a imagem (apenas para a posição Hero). */
+  badgeLeft?: HeroBadge;
+  badgeRight?: HeroBadge;
 }
 
 export type OrderStatus =

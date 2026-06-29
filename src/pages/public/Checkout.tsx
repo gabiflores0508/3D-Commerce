@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useSEO } from '@/utils/seo';
 import type { Order, OrderItem } from '@/types';
 import { useCurrentCustomer } from '@/store/useCustomerAuthStore';
+import { maskPhone, maskCPF, maskCEP } from '@/utils/masks';
 
 const customerSchema = z.object({
   name: z.string().min(3, 'Informe seu nome completo'),
@@ -293,6 +294,8 @@ function CustomerStep({ defaults, onNext }: { defaults?: Customer; onNext: (d: C
     resolver: zodResolver(customerSchema),
     defaultValues: defaults,
   });
+  const phoneReg = register('phone');
+  const cpfReg = register('cpf');
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
       <h2 className="text-lg font-bold">Seus dados</h2>
@@ -307,12 +310,29 @@ function CustomerStep({ defaults, onNext }: { defaults?: Customer; onNext: (d: C
         </div>
         <div>
           <Label>Telefone / WhatsApp</Label>
-          <Input {...register('phone')} placeholder="(54) 99999-9999" error={errors.phone?.message} />
+          <Input
+            {...phoneReg}
+            inputMode="tel"
+            placeholder="(54) 99999-9999"
+            error={errors.phone?.message}
+            onChange={(e) => {
+              e.target.value = maskPhone(e.target.value);
+              phoneReg.onChange(e);
+            }}
+          />
         </div>
       </div>
       <div>
         <Label>CPF (opcional)</Label>
-        <Input {...register('cpf')} placeholder="000.000.000-00" />
+        <Input
+          {...cpfReg}
+          inputMode="numeric"
+          placeholder="000.000.000-00"
+          onChange={(e) => {
+            e.target.value = maskCPF(e.target.value);
+            cpfReg.onChange(e);
+          }}
+        />
       </div>
       <Button>Continuar para endereço</Button>
     </form>
@@ -324,13 +344,23 @@ function AddressStep({ defaults, onBack, onNext }: { defaults?: Address; onBack:
     resolver: zodResolver(addressSchema),
     defaultValues: defaults,
   });
+  const cepReg = register('cep');
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
       <h2 className="text-lg font-bold">Endereço de entrega</h2>
       <div className="grid grid-cols-3 gap-3">
         <div>
           <Label>CEP</Label>
-          <Input {...register('cep')} placeholder="00000-000" error={errors.cep?.message} />
+          <Input
+            {...cepReg}
+            inputMode="numeric"
+            placeholder="00000-000"
+            error={errors.cep?.message}
+            onChange={(e) => {
+              e.target.value = maskCEP(e.target.value);
+              cepReg.onChange(e);
+            }}
+          />
         </div>
         <div className="col-span-2">
           <Label>Rua</Label>
