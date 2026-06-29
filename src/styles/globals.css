@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ink/40 ring-offset-2 ring-offset-bg;
+  }
+  ::selection {
+    background: #0F1115;
+    color: #FAFAF7;
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98];
+  }
+  .btn-primary {
+    @apply btn bg-ink text-bg hover:bg-graphite-dark hover:shadow-lg hover:shadow-ink/10;
+  }
+  .btn-secondary {
+    @apply btn bg-bg-soft text-ink hover:bg-ink/5 border border-ink-line hover:border-ink/40;
+  }
+  .btn-ghost {
+    @apply btn text-ink hover:bg-ink/5;
+  }
+  .btn-whatsapp {
+    @apply btn bg-emerald-500 text-white hover:bg-emerald-600 hover:shadow-lg hover:shadow-emerald-500/20;
+  }
+  .btn-danger {
+    @apply btn bg-rose-500 text-white hover:bg-rose-600;
+  }
+  .input {
+    @apply w-full rounded-xl border border-ink-line bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink-mute transition focus:border-ink focus:outline-none;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-soft;
+  }
+  .card {
+    @apply rounded-2xl bg-bg-card shadow-card border border-ink-line/60;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-bg-soft px-2.5 py-1 text-xs font-medium text-ink-soft border border-ink-line;
+  }
+  .nav-link {
+    @apply relative text-sm font-medium text-ink-soft hover:text-ink transition;
+  }
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -6px;
+    height: 1px;
+    width: 0;
+    background: #0F1115;
+    transition: width 0.2s ease;
+    pointer-events: none;
+  }
+  .nav-link:hover::after { width: 100%; }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider;
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-mute;
+  }
+  .eyebrow::before {
+    content: '';
+    height: 1px;
+    width: 1.5rem;
+    background: rgba(15, 17, 21, 0.3);
+  }
+  .section-title {
+    @apply mt-2 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl md:text-4xl;
+  }
+  .price-display {
+    @apply font-display tabular-nums;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #0F1115 0%, #3A3F47 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .glow-accent {
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18), 0 8px 28px -8px rgba(34, 211, 238, 0.35);
+  }
+  .ring-tech {
+    box-shadow:
+      0 0 0 1px rgba(15, 17, 21, 0.04),
+      0 10px 30px -10px rgba(15, 17, 21, 0.18);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

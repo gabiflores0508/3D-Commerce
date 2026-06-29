@@ -1,0 +1,196 @@
+export type PurchaseMode = 'direct' | 'quote' | 'both';
+
+export type ProductBadge = 'oferta' | 'lancamento' | 'mais-vendido' | 'esgotado' | 'frete-gratis';
+
+export type VariationType =
+  | 'cor'
+  | 'material'
+  | 'peso'
+  | 'diametro'
+  | 'voltagem'
+  | 'tamanho'
+  | 'modelo';
+
+export interface ProductVariation {
+  id: string;
+  label: string;
+  type: VariationType;
+  inStock: boolean;
+  priceDelta?: number;
+  swatch?: string;
+}
+
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  shortDescription: string;
+  categoryIds: string[];
+  brand: string;
+  material?: 'PLA' | 'PETG' | 'ABS' | 'Resina' | '-';
+  images: string[];
+  price: number;
+  promoPrice?: number;
+  pixPrice?: number;
+  stock: number;
+  freeShipping: boolean;
+  purchaseMode: PurchaseMode;
+  variations: ProductVariation[];
+  badges: ProductBadge[];
+  isHighlight: boolean;
+  isLaunch: boolean;
+  isOffer: boolean;
+  isBestSeller: boolean;
+  active: boolean;
+  createdAt: string;
+  attributes: Record<string, string>;
+}
+
+export interface Category {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  showInMenu: boolean;
+  showInHome: boolean;
+  order: number;
+  isSeasonal?: boolean;
+  seasonalBanner?: string;
+  seasonalBannerImage?: string;
+  seasonalActive?: boolean;
+  productIds?: string[];
+  color?: string;
+}
+
+export interface Banner {
+  id: string;
+  title: string;
+  subtitle?: string;
+  ctaLabel?: string;
+  ctaLink?: string;
+  image: string;
+  position: 'hero' | 'filamentos' | 'impressoras' | 'sazonal';
+  active: boolean;
+  order: number;
+  bgFrom?: string;
+  bgTo?: string;
+}
+
+export type OrderStatus =
+  | 'novo'
+  | 'aguardando-pagamento'
+  | 'pago'
+  | 'em-separacao'
+  | 'enviado'
+  | 'concluido'
+  | 'cancelado';
+
+export interface OrderItem {
+  productId: string;
+  name: string;
+  image: string;
+  variationLabel?: string;
+  qty: number;
+  unitPrice: number;
+}
+
+export interface Order {
+  id: string;
+  createdAt: string;
+  customerId?: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    cpf?: string;
+  };
+  address: {
+    cep: string;
+    street: string;
+    number: string;
+    complement?: string;
+    district: string;
+    city: string;
+    state: string;
+  };
+  items: OrderItem[];
+  shipping: {
+    method: string;
+    price: number;
+    deadline: string;
+  };
+  payment: {
+    method: 'pix' | 'credito' | 'boleto';
+    installments?: number;
+  };
+  coupon?: {
+    code: string;
+    discount: number;
+  };
+  subtotal: number;
+  total: number;
+  status: OrderStatus;
+}
+
+export interface StoreSettings {
+  name: string;
+  whatsapp: string;
+  instagram: string;
+  email: string;
+  address: string;
+  cnpj: string;
+  about: string;
+  shippingNote: string;
+  freeShippingThreshold: number;
+  pixDiscountPercent: number;
+  logo?: string;
+}
+
+export interface CartItem {
+  productId: string;
+  variationId?: string;
+  variationLabel?: string;
+  qty: number;
+}
+
+export interface BlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  cover: string;
+  author: string;
+  category: string;
+  readTime: string;
+  createdAt: string;
+}
+
+export interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface CustomerAddress {
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** Apenas mock: NÃO usar em produção. Substituir por Supabase Auth na Fase 2. */
+  password: string;
+  createdAt: string;
+  defaultAddress?: CustomerAddress;
+}

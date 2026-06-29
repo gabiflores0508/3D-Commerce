@@ -1,0 +1,77 @@
+import { Link } from 'react-router-dom';
+import { useSEO } from '@/utils/seo';
+
+const materials = [
+  {
+    name: 'PLA',
+    slug: 'pla',
+    color: '#22D3EE',
+    intro: 'O filamento mais usado no mundo. Fácil de imprimir, biodegradável, ótimo acabamento.',
+    bestFor: 'Iniciantes, peças decorativas, protótipos e brinquedos.',
+    avoid: 'Peças expostas ao sol direto ou a temperaturas acima de 60°C.',
+  },
+  {
+    name: 'PETG',
+    slug: 'petg',
+    color: '#34D399',
+    intro: 'Equilíbrio entre PLA e ABS. Mais resistente, brilhante e bom para peças funcionais.',
+    bestFor: 'Suportes, peças mecânicas leves, embalagens, projetos ao ar livre.',
+    avoid: 'Pode ser pegajoso na adesão se mal calibrado.',
+  },
+  {
+    name: 'ABS',
+    slug: 'abs',
+    color: '#F472B6',
+    intro: 'Material clássico da indústria. Resistente ao calor e a impactos, exige câmara fechada.',
+    bestFor: 'Peças funcionais, componentes automotivos, eletrônicos.',
+    avoid: 'Iniciantes sem câmara fechada — sofre com contração e odor.',
+  },
+  {
+    name: 'Resina',
+    slug: 'resinas',
+    color: '#A78BFA',
+    intro: 'Para impressoras LCD/SLA. Resolução excepcional, ideal para miniaturas.',
+    bestFor: 'Miniaturas, jóias, modelos dentais, brinquedos detalhados.',
+    avoid: 'Requer EPI, lavagem e cura UV no pós-processo.',
+  },
+];
+
+export default function Materials() {
+  useSEO('Materiais e aplicações');
+  return (
+    <div className="container-x py-12">
+      <header className="max-w-3xl">
+        <p className="eyebrow">Guia</p>
+        <h1 className="section-title">Materiais e aplicações</h1>
+        <p className="mt-4 text-base leading-relaxed text-ink-mute">
+          Um guia rápido para você escolher o material certo para o seu projeto.
+        </p>
+      </header>
+
+      <div className="mt-10 space-y-6">
+        {materials.map((m) => (
+          <article key={m.slug} className="group card p-6 transition-shadow hover:shadow-card md:p-8">
+            <div className="flex items-center gap-3">
+              <span className="h-3 w-14 rounded-full transition-all group-hover:w-20" style={{ background: m.color }} />
+              <h2 className="font-display text-2xl font-bold tracking-tight">{m.name}</h2>
+            </div>
+            <p className="mt-3 text-ink-soft">{m.intro}</p>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl bg-bg-soft p-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Indicado para</p>
+                <p className="mt-1 text-sm">{m.bestFor}</p>
+              </div>
+              <div className="rounded-xl bg-bg-soft p-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-rose-500">Evitar</p>
+                <p className="mt-1 text-sm">{m.avoid}</p>
+              </div>
+            </div>
+            <Link to={`/categoria/${m.slug}`} className="btn-secondary mt-5">
+              Ver produtos de {m.name}
+            </Link>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
