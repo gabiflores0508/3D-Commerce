@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { ProductGrid } from '@/components/product/ProductGrid';
-import { ProductFilters, type FiltersState } from '@/components/product/ProductFilters';
+import { ProductFilters, MAX_PRICE, type FiltersState } from '@/components/product/ProductFilters';
 import { ProductSort, applySort, type SortKey } from '@/components/product/ProductSort';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -17,35 +17,61 @@ export default function Shop({ categorySlug, title }: { categorySlug?: string; t
 
   const category = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
 
+  const isOffersPage = category?.slug === 'ofertas';
+
   const [filters, setFilters] = useState<FiltersState>({
     q,
-    categories: category ? [category.id] : [],
+    categories: category && !isOffersPage ? [category.id] : [],
     materials: [],
     brands: [],
     minPrice: 0,
-    maxPrice: 5000,
+    maxPrice: MAX_PRICE,
     inStockOnly: false,
-    onlyOffer: category?.slug === 'ofertas',
   });
   const [sort, setSort] = useState<SortKey>('novidades');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const filtered = useMemo(() => {
+  // Resync os filtros quando a categoria da rota muda (ex.: PLA -> PETG).
+  // Sem isso, o componente Shop permanece montado entre rotas /categoria/:slug
+  // e o filtro de categoria fica preso na primeira categoria selecionada,
+  // exibindo todos os filamentos independente do menu escolhido.
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      categories: category && !isOffersPage ? [category.id] : [],
+      // Marcas selecionadas que não existem na nova categoria são descartadas,
+      // evitando filtro "preso" sem resultados ao trocar de catálogo.
+      brands: [],
+    }));
+  }, [category?.id]);
+
+  // Produtos do escopo do catálogo atual (apenas o recorte de categoria/ofertas/sazonal),
+  // sem aplicar os filtros secundários. Serve de base para a lista e para alimentar
+  // o painel de filtros — assim a lista de marcas mostra só as marcas presentes aqui.
+  const scopedProducts = useMemo(() => {
     let arr = products.filter((p) => p.active);
-    if (category?.isSeasonal && category.productIds?.length) {
+    if (category?.slug === 'ofertas') {
+      // "Ofertas" não é uma categoria atribuída ao produto: é a flag "Oferta"
+      // OU qualquer produto com preço promocional menor que o preço normal.
+      arr = arr.filter((p) => p.isOffer || (p.promoPrice != null && p.promoPrice < p.price));
+    } else if (category?.isSeasonal && category.productIds?.length) {
       arr = arr.filter((p) => category.productIds!.includes(p.id));
     } else if (filters.categories.length) {
       arr = arr.filter((p) => p.categoryIds.some((id) => filters.categories.includes(id)));
     }
-    if (filters.materials.length) {
-      arr = arr.filter((p) => p.material && filters.materials.includes(p.material));
-    }
+    return arr;
+  }, [products, category, filters.categories]);
+
+  const filtered = useMemo(() => {
+    let arr = scopedProducts;
     if (filters.brands.length) {
       arr = arr.filter((p) => filters.brands.includes(p.brand));
     }
-    arr = arr.filter((p) => (p.promoPrice ?? p.price) <= filters.maxPrice);
+    arr = arr.filter((p) => {
+      const price = p.promoPrice ?? p.price;
+      return price >= filters.minPrice && price <= filters.maxPrice;
+    });
     if (filters.inStockOnly) arr = arr.filter((p) => p.stock > 0);
-    if (filters.onlyOffer) arr = arr.filter((p) => p.isOffer);
     const text = (q || filters.q).trim().toLowerCase();
     if (text) {
       arr = arr.filter(
@@ -57,7 +83,7 @@ export default function Shop({ categorySlug, title }: { categorySlug?: string; t
       );
     }
     return applySort(arr, sort);
-  }, [products, filters, category, q, sort]);
+  }, [scopedProducts, filters, q, sort]);
 
   return (
     <div className="container-x py-10">
@@ -70,7 +96,7 @@ export default function Shop({ categorySlug, title }: { categorySlug?: string; t
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
         <div className="hidden lg:block">
-          <ProductFilters products={products} filters={filters} setFilters={setFilters} />
+          <ProductFilters products={scopedProducts} filters={filters} setFilters={setFilters} />
         </div>
 
         <div>
@@ -106,7 +132,7 @@ export default function Shop({ categorySlug, title }: { categorySlug?: string; t
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <ProductFilters products={products} filters={filters} setFilters={setFilters} />
+            <ProductFilters products={scopedProducts} filters={filters} setFilters={setFilters} />
           </div>
         </div>
       )}

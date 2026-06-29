@@ -14,10 +14,18 @@ export function MegaMenu({ open, onClose, onMouseEnter, onMouseLeave }: Props) {
   const categories = useAdminDataStore((s) => s.categories);
   const products = useAdminDataStore((s) => s.products);
 
-  const main = categories.filter((c) => c.showInMenu && !c.isSeasonal && c.slug !== 'ofertas');
+  const main = categories
+    .filter((c) => c.showInMenu && !c.isSeasonal && c.slug !== 'ofertas')
+    .sort((a, b) => a.order - b.order);
   const seasonal = categories.find((c) => c.isSeasonal && c.seasonalActive && c.showInMenu);
   const offers = categories.find((c) => c.slug === 'ofertas');
   const highlights = products.filter((p) => p.isHighlight && p.active).slice(0, 4);
+
+  // Coluna "Materiais": categorias de filamento/resina conhecidas.
+  // Coluna "Loja": todas as demais (inclui categorias novas criadas no admin).
+  const materialSlugs = ['pla', 'petg', 'abs', 'resinas'];
+  const materialCats = main.filter((c) => materialSlugs.includes(c.slug));
+  const otherCats = main.filter((c) => !materialSlugs.includes(c.slug));
 
   return (
     <AnimatePresence>
@@ -38,38 +46,45 @@ export function MegaMenu({ open, onClose, onMouseEnter, onMouseLeave }: Props) {
             <div className="col-span-3">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink-mute">Materiais</p>
               <ul className="space-y-2">
-                {main
-                  .filter((c) => ['pla', 'petg', 'abs', 'resinas'].includes(c.slug))
-                  .map((c) => (
-                    <li key={c.id}>
-                      <Link
-                        to={`/categoria/${c.slug}`}
-                        onClick={onClose}
-                        className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
-                      >
-                        {c.name}
-                        <ArrowRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />
-                      </Link>
-                    </li>
-                  ))}
+                {materialCats.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      to={`/categoria/${c.slug}`}
+                      onClick={onClose}
+                      className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
+                    >
+                      {c.name}
+                      <ArrowRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="col-span-3">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink-mute">Loja</p>
               <ul className="space-y-2">
-                {main
-                  .filter((c) => ['impressoras-3d', 'acessorios', 'produtos-prontos'].includes(c.slug))
-                  .map((c) => (
-                    <li key={c.id}>
-                      <Link
-                        to={`/categoria/${c.slug}`}
-                        onClick={onClose}
-                        className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
-                      >
-                        {c.name}
-                      </Link>
-                    </li>
-                  ))}
+                {otherCats.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      to={`/categoria/${c.slug}`}
+                      onClick={onClose}
+                      className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
+                    >
+                      {c.name}
+                      <ArrowRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <Link
+                    to="/loja"
+                    onClick={onClose}
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-ink hover:text-ink-soft"
+                  >
+                    Ver tudo
+                    <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" />
+                  </Link>
+                </li>
               </ul>
               <div className="mt-6 space-y-2">
                 {offers && (

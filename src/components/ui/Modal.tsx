@@ -30,7 +30,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }:
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.2 }}
-            className={`relative z-10 w-full ${maxWidth} card p-6`}
+            className={`relative z-10 flex max-h-[90vh] w-full flex-col ${maxWidth} card p-6`}
           >
             <button
               onClick={onClose}
@@ -39,8 +39,10 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }:
             >
               <X className="h-4 w-4" />
             </button>
-            {title && <h3 className="mb-4 text-lg font-bold">{title}</h3>}
-            {children}
+            {title && <h3 className="mb-4 shrink-0 text-lg font-bold">{title}</h3>}
+            {/* Conteúdo rola internamente quando ultrapassa a altura da tela.
+                A margem negativa + padding evita cortar sombras/foco das bordas. */}
+            <div className="-mx-6 -mb-6 overflow-y-auto px-6 pb-6">{children}</div>
           </motion.div>
         </motion.div>
       )}

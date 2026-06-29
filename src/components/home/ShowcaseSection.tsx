@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import type { Product } from '@/types';
-import { ProductGrid } from '@/components/product/ProductGrid';
+import { ProductCard } from '@/components/product/ProductCard';
+import { Carousel } from '@/components/ui/Carousel';
 
 interface Props {
   eyebrow: string;
@@ -30,7 +31,11 @@ export function ShowcaseSection({ eyebrow, title, ctaTo, ctaLabel, products }: P
           </Link>
         )}
       </div>
-      <ProductGrid products={products.slice(0, 8)} />
+      <Carousel ariaLabel={title}>
+        {products.slice(0, 12).map((p) => (
+          <ProductCard key={p.id} product={p} />
+        ))}
+      </Carousel>
     </section>
   );
 }

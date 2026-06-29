@@ -1,6 +1,7 @@
 import { Instagram } from 'lucide-react';
 import { site } from '@/config/site';
 import { productSvg } from '@/utils/productImage';
+import { Carousel } from '@/components/ui/Carousel';
 
 const tiles = Array.from({ length: 6 }, (_, i) => ({
   id: i,
@@ -24,14 +25,14 @@ export function InstagramFeed() {
           {site.instagramHandle} →
         </a>
       </div>
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+      <Carousel ariaLabel="Instagram" itemClassName="w-[40%] sm:w-[28%] md:w-[16%]" gapClassName="gap-2">
         {tiles.map((t) => (
           <a
             key={t.id}
             href={site.instagram}
             target="_blank"
             rel="noreferrer"
-            className="group relative aspect-square overflow-hidden rounded-xl"
+            className="group relative block aspect-square overflow-hidden rounded-xl"
           >
             <img src={t.img} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
             <div className="absolute inset-0 flex items-center justify-center bg-ink/0 transition group-hover:bg-ink/40">
@@ -39,7 +40,7 @@ export function InstagramFeed() {
             </div>
           </a>
         ))}
-      </div>
+      </Carousel>
     </section>
   );
 }

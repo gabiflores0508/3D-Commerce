@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { Carousel } from '@/components/ui/Carousel';
 
 const items = [
   {
@@ -35,7 +36,7 @@ export function MaterialsEducation() {
             Conheça os principais filamentos e resinas que trabalhamos e escolha o que combina com o seu projeto.
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Carousel ariaLabel="Materiais" itemClassName="w-[78%] sm:w-[45%] lg:w-[24%]">
           {items.map((it, i) => (
             <motion.div
               key={it.name}
@@ -43,14 +44,14 @@ export function MaterialsEducation() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.05 }}
-              className="group rounded-2xl border border-ink-line/70 bg-bg-card p-6 transition-all hover:-translate-y-1 hover:border-ink/20 hover:shadow-card"
+              className="group h-full rounded-2xl border border-ink-line/70 bg-bg-card p-6 transition-all hover:-translate-y-1 hover:border-ink/20 hover:shadow-card"
             >
               <span className="block h-2 w-14 rounded-full transition-all group-hover:w-20" style={{ background: it.color }} />
               <h3 className="mt-5 font-display text-2xl font-bold">{it.name}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-mute">{it.desc}</p>
             </motion.div>
           ))}
-        </div>
+        </Carousel>
         <div className="mt-6">
           <Link to="/materiais" className="text-sm font-semibold text-ink hover:underline">
             Ver guia completo de materiais →
