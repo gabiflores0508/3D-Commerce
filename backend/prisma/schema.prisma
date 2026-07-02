@@ -1,0 +1,404 @@
+// 3D Commerce — schema do banco
+// Convenções:
+//   - Models em PascalCase, campos em camelCase.
+//   - Tabelas mapeadas para snake_case via @@map (e colunas-chave via @map).
+//   - Valores monetários em Decimal(12, 2) para evitar float drift.
+//   - Snapshots (cliente/endereço/produto em pedido) preservam histórico mesmo
+//     se o registro de origem for editado ou removido depois.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================================
+// Enums
+// =========================================================================
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_PRODUCTION
+  READY
+  SHIPPED
+  DELIVERED
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  BOLETO
+}
+
+enum ProductPurchaseMode {
+  DIRECT
+  QUOTE
+  BOTH
+}
+
+enum QuoteStatus {
+  RECEIVED
+  ANALYZING
+  WAITING_CUSTOMER
+  APPROVED
+  REJECTED
+  CONVERTED_TO_ORDER
+}
+
+enum ContactMessageStatus {
+  NEW
+  READ
+  ANSWERED
+  ARCHIVED
+}
+
+// =========================================================================
+// Usuários e endereços
+// =========================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  phone        String?
+  role         UserRole @default(CUSTOMER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  addresses Address[]
+  cart      Cart?
+  orders    Order[]
+  quotes    Quote[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Address {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  label         String?
+  recipientName String   @map("recipient_name")
+  phone         String
+  zipCode       String   @map("zip_code")
+  street        String
+  number        String
+  complement    String?
+  district      String
+  city          String
+  state         String
+  country       String   @default("Brasil")
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// =========================================================================
+// Catálogo
+// =========================================================================
+
+model Category {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  description         String?
+  active              Boolean  @default(true)
+  isSeasonal          Boolean  @default(false) @map("is_seasonal")
+  seasonalTitle       String?  @map("seasonal_title")
+  seasonalDescription String?  @map("seasonal_description")
+  seasonalBannerImage String?  @map("seasonal_banner_image")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@index([active])
+  @@map("categories")
+}
+
+model Product {
+  id               String              @id @default(cuid())
+  categoryId       String              @map("category_id")
+  name             String
+  slug             String              @unique
+  shortDescription String?             @map("short_description")
+  description      String?
+  price            Decimal             @db.Decimal(12, 2)
+  promotionalPrice Decimal?            @map("promotional_price") @db.Decimal(12, 2)
+  sku              String?             @unique
+  stock            Int                 @default(0)
+  active           Boolean             @default(true)
+  featured         Boolean             @default(false)
+  // Dimensões e atributos físicos
+  weight           Decimal?            @db.Decimal(10, 3) // kg
+  width            Decimal?            @db.Decimal(10, 2) // cm
+  height           Decimal?            @db.Decimal(10, 2) // cm
+  depth            Decimal?            @db.Decimal(10, 2) // cm
+  material         String?
+  color            String?
+  printTime        String?             @map("print_time")
+  purchaseMode     ProductPurchaseMode @default(DIRECT) @map("purchase_mode")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  category   Category       @relation(fields: [categoryId], references: [id])
+  images     ProductImage[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([categoryId])
+  @@index([active])
+  @@index([featured])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String   @map("product_id")
+  url       String
+  alt       String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// =========================================================================
+// Carrinho
+// =========================================================================
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String   @map("cart_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  // Evita o mesmo produto duplicado no mesmo carrinho.
+  @@unique([cartId, productId])
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// =========================================================================
+// Pedidos
+// =========================================================================
+
+model Order {
+  id              String        @id @default(cuid())
+  userId          String?       @map("user_id")
+  // Snapshot do cliente — preserva histórico mesmo se o User mudar.
+  customerName    String        @map("customer_name")
+  customerEmail   String        @map("customer_email")
+  customerPhone   String        @map("customer_phone")
+  // Snapshot do endereço (JSON). Estrutura:
+  // { recipientName, zipCode, street, number, complement?, district, city, state, country }
+  addressSnapshot Json          @map("address_snapshot")
+  subtotal        Decimal       @db.Decimal(12, 2)
+  shippingValue   Decimal       @default(0) @map("shipping_value") @db.Decimal(12, 2)
+  discountValue   Decimal       @default(0) @map("discount_value") @db.Decimal(12, 2)
+  total           Decimal       @db.Decimal(12, 2)
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod @map("payment_method")
+  paymentStatus   PaymentStatus @default(PENDING) @map("payment_status")
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String   @map("order_id")
+  // productId opcional — produto pode ser removido depois sem perder o pedido.
+  productId   String?  @map("product_id")
+  productName String   @map("product_name")
+  productSku  String?  @map("product_sku")
+  quantity    Int
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// =========================================================================
+// Orçamentos personalizados (impressão 3D)
+// =========================================================================
+
+model Quote {
+  id             String      @id @default(cuid())
+  userId         String?     @map("user_id")
+  customerName   String      @map("customer_name")
+  customerEmail  String      @map("customer_email")
+  customerPhone  String      @map("customer_phone")
+  title          String
+  description    String
+  material       String?
+  color          String?
+  quantity       Int         @default(1)
+  deadline       String?
+  estimatedValue Decimal?    @map("estimated_value") @db.Decimal(12, 2)
+  adminNotes     String?     @map("admin_notes")
+  status         QuoteStatus @default(RECEIVED)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  files QuoteFile[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("quotes")
+}
+
+model QuoteFile {
+  id           String   @id @default(cuid())
+  quoteId      String   @map("quote_id")
+  filename     String // nome no disco
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  size         Int // bytes
+  url          String // URL pública servida pelo /uploads
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("quote_files")
+}
+
+// =========================================================================
+// Configurações e conteúdo editável
+// =========================================================================
+
+model SiteSettings {
+  // Constante: garantimos um único registro com id fixo "main".
+  id                    String   @id @default("main")
+  storeName             String   @map("store_name")
+  whatsapp              String
+  email                 String
+  instagram             String?
+  address               String
+  cnpj                  String?
+  logoUrl               String?  @map("logo_url")
+  heroTitle             String?  @map("hero_title")
+  heroSubtitle          String?  @map("hero_subtitle")
+  aboutTitle            String?  @map("about_title")
+  aboutText             String?  @map("about_text")
+  seoTitle              String?  @map("seo_title")
+  seoDescription        String?  @map("seo_description")
+  pixDiscountPercent    Decimal  @default(5) @map("pix_discount_percent") @db.Decimal(5, 2)
+  freeShippingThreshold Decimal  @default(299) @map("free_shipping_threshold") @db.Decimal(12, 2)
+  shippingNote          String?  @map("shipping_note")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model Banner {
+  id         String   @id @default(cuid())
+  title      String
+  subtitle   String?
+  imageUrl   String?  @map("image_url")
+  buttonText String?  @map("button_text")
+  buttonLink String?  @map("button_link")
+  active     Boolean  @default(true)
+  position   Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
+  @@index([position])
+  @@map("banners")
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  role      String?
+  content   String
+  rating    Int      @default(5)
+  avatarUrl String?  @map("avatar_url")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
+  @@map("testimonials")
+}
+
+model ContactMessage {
+  id        String               @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String
+  status    ContactMessageStatus @default(NEW)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("contact_messages")
+}

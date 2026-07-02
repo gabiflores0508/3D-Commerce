@@ -12,8 +12,11 @@ import { useAdminDataStore } from '@/store/useAdminDataStore';
 import type { Product, ProductVariation, PurchaseMode, VariationType } from '@/types';
 import { productSvg } from '@/utils/productImage';
 import { useSEO } from '@/utils/seo';
-import { ImageUploader } from '@/components/admin/ImageUploader';
+import { RemoteImageUploader } from '@/components/admin/RemoteImageUploader';
 import { Markdown } from '@/components/ui/Markdown';
+import { productService } from '@/services/productService';
+import { ApiError } from '@/services/api';
+import { apiProductToInternal } from '@/services/adapters';
 
 // Inputs numéricos vazios chegam como "" e z.coerce.number() os transforma em 0.
 // Isso fazia o "Preço promo" virar 0 e a vitrine exibir "R$ 0,00".
@@ -82,7 +85,11 @@ export default function ProductForm() {
   const name = watch('name');
   const descriptionValue = watch('description') ?? '';
   const [showPreview, setShowPreview] = useState(false);
-  const [images, setImages] = useState<string[]>(existing ? existing.images : []);
+  // Cada imagem carrega o id do backend para permitir remoção real.
+  // Se `id === null`, é placeholder local (produto ainda não persistido).
+  const [images, setImages] = useState<Array<{ id: string | null; url: string }>>(
+    existing ? existing.images.map((u) => ({ id: null, url: u })) : [],
+  );
 
   // Especificações = pares chave/valor (product.attributes). Editáveis aqui.
   const [specs, setSpecs] = useState<{ key: string; value: string }[]>(
@@ -139,10 +146,30 @@ export default function ProductForm() {
 
   useEffect(() => {
     if (!existing && images.length === 0 && name) {
-      setImages([productSvg(name, 'generic', Math.floor(Math.random() * 999))]);
+      setImages([{ id: null, url: productSvg(name, 'generic', Math.floor(Math.random() * 999)) }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
+
+  // Ao entrar em edição, busca o produto real do backend para pegar os IDs
+  // das imagens (necessário para o DELETE por imageId).
+  useEffect(() => {
+    if (!existing) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { product } = await productService.getPublicBySlug(existing.slug);
+        if (cancelled) return;
+        if (product.images.length > 0) {
+          setImages(product.images.map((img) => ({ id: img.id, url: img.url })));
+        }
+      } catch {
+        // mantém as imagens do store como fallback
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onSubmit(d: FormData) {
     const badges: Product['badges'] = [];
@@ -152,7 +179,12 @@ export default function ProductForm() {
     if (d.stock <= 0) badges.push('esgotado');
     if (d.freeShipping) badges.push('frete-gratis');
 
-    const finalImages = images.length > 0 ? images : [productSvg(d.name, 'generic', 1)];
+    // Não empurramos mais imagens Base64 para o backend — o upload real
+    // acontece via RemoteImageUploader (endpoint /products/:id/images).
+    // O store guarda a lista de URLs só para exibição imediata.
+    const finalImages = images.length > 0
+      ? images.map((i) => i.url)
+      : [productSvg(d.name, 'generic', 1)];
     if (isEdit && existing) {
       updateProduct(existing.id, {
         ...d,
@@ -464,13 +496,46 @@ export default function ProductForm() {
         <aside className="space-y-5">
           <div className="card p-5">
             <h2 className="text-base font-bold">Imagens do produto</h2>
+            {!isEdit && (
+              <p className="mt-1 text-[11px] text-ink-mute">
+                Salve o produto primeiro para poder enviar imagens ao servidor.
+              </p>
+            )}
             <div className="mt-4">
-              <ImageUploader
+              <RemoteImageUploader
                 multiple
                 max={6}
-                value={images}
-                onChange={setImages}
-                hint="Primeira imagem vira a principal. Upload demonstrativo: imagens ficam salvas no navegador (até 1MB cada)."
+                value={images.map((i) => i.url)}
+                onUploadMany={async (files) => {
+                  if (!isEdit || !existing) {
+                    throw new Error('Salve o produto antes de enviar imagens.');
+                  }
+                  try {
+                    const { product } = await productService.addImages(existing.id, files);
+                    const next = product.images.map((img) => ({ id: img.id, url: img.url }));
+                    setImages(next);
+                    // Atualiza cache no store também.
+                    const internal = apiProductToInternal(product);
+                    updateProduct(existing.id, { images: internal.images });
+                    return next.map((n) => n.url);
+                  } catch (err) {
+                    const msg = err instanceof ApiError ? err.message : 'Falha ao enviar imagens.';
+                    throw new Error(msg);
+                  }
+                }}
+                onRemoveAt={async (idx) => {
+                  const img = images[idx];
+                  if (!img) return;
+                  if (img.id) {
+                    try {
+                      await productService.removeImage(img.id);
+                    } catch (err) {
+                      throw new Error(err instanceof ApiError ? err.message : 'Erro ao remover imagem.');
+                    }
+                  }
+                  setImages((prev) => prev.filter((_, i) => i !== idx));
+                }}
+                hint="JPG/PNG/WEBP até 5MB. Primeira imagem vira a principal."
               />
             </div>
           </div>

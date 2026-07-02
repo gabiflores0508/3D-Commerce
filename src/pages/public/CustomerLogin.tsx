@@ -26,8 +26,8 @@ export default function CustomerLogin() {
 
   if (isLogged) return <Navigate to="/minha-conta" replace />;
 
-  function onSubmit(d: Data) {
-    const r = loginCustomer(d.email, d.password);
+  async function onSubmit(d: Data) {
+    const r = await loginCustomer(d.email, d.password);
     if (r.ok) {
       toast.success('Bem-vindo de volta!');
       navigate('/minha-conta');

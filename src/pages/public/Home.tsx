@@ -5,6 +5,7 @@ import { SeasonalBanner } from '@/components/home/SeasonalBanner';
 import { MaterialsEducation } from '@/components/home/MaterialsEducation';
 import { WhyBuy } from '@/components/home/WhyBuy';
 import { PhysicalStore } from '@/components/home/PhysicalStore';
+import { Testimonials } from '@/components/home/Testimonials';
 import { InstagramFeed } from '@/components/home/InstagramFeed';
 import { Newsletter } from '@/components/home/Newsletter';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
@@ -28,6 +29,7 @@ export default function Home() {
       <ShowcaseSection eyebrow="Mais vendidos" title="Quem chega leva" ctaTo="/loja" products={bestSellers} />
       <MaterialsEducation />
       <WhyBuy />
+      <Testimonials />
       <PhysicalStore />
       <InstagramFeed />
       <Newsletter />

@@ -1,14 +1,27 @@
 /**
- * Store mockado de autenticação de cliente final.
+ * Store de autenticação do cliente final — R9.
  *
- * ATENÇÃO — DEMONSTRAÇÃO APENAS:
- * - Senhas ficam em localStorage em texto puro.
- * - Não há criptografia, hash ou validação no servidor.
- * - Substituir por Supabase Auth (ou outro provedor) na Fase 2.
+ * Fala com o backend real (JWT). Não guarda senha em localStorage.
+ * O JWT fica em `localStorage['3dc-token-customer']` (gerenciado por api.ts).
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { authService } from '@/services/authService';
+import { ApiError, getStoredToken, setAuthToken } from '@/services/api';
+import type { ApiUser } from '@/services/types';
 import type { Customer, CustomerAddress } from '@/types';
+import { useCartStore } from '@/store/useCartStore';
+
+function apiUserToInternal(u: ApiUser): Customer {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    phone: u.phone ?? '',
+    password: '',
+    createdAt: u.createdAt,
+  };
+}
 
 interface RegisterInput {
   name: string;
@@ -19,10 +32,14 @@ interface RegisterInput {
 }
 
 interface CustomerAuthState {
+  /** Sempre uma lista com no máximo 1 (o próprio) — mantido pra compat com telas antigas. */
   customers: Customer[];
   currentCustomerId: string | null;
-  registerCustomer: (data: RegisterInput) => { ok: boolean; error?: string; customer?: Customer };
-  loginCustomer: (email: string, password: string) => { ok: boolean; error?: string };
+  loading: boolean;
+
+  init: () => Promise<void>;
+  registerCustomer: (data: RegisterInput) => Promise<{ ok: boolean; error?: string; customer?: Customer }>;
+  loginCustomer: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logoutCustomer: () => void;
   updateCustomer: (patch: Partial<Omit<Customer, 'id' | 'password' | 'createdAt'>>) => void;
 }
@@ -32,45 +49,101 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
     (set, get) => ({
       customers: [],
       currentCustomerId: null,
-      registerCustomer: (data) => {
-        const email = data.email.trim().toLowerCase();
-        const exists = get().customers.find((c) => c.email.toLowerCase() === email);
-        if (exists) return { ok: false, error: 'Este e-mail já está cadastrado.' };
-        const customer: Customer = {
-          id: 'cust-' + Date.now(),
-          name: data.name.trim(),
-          email,
-          phone: data.phone,
-          password: data.password,
-          createdAt: new Date().toISOString(),
-          defaultAddress: data.defaultAddress,
-        };
-        set({
-          customers: [...get().customers, customer],
-          currentCustomerId: customer.id,
-        });
-        return { ok: true, customer };
+      loading: false,
+
+      async init() {
+        const token = getStoredToken('customer');
+        if (!token) return;
+        try {
+          const { user } = await authService.me(token);
+          if (user.role !== 'CUSTOMER') {
+            setAuthToken('customer', null);
+            return;
+          }
+          const c = apiUserToInternal(user);
+          set({ customers: [c], currentCustomerId: c.id });
+        } catch {
+          setAuthToken('customer', null);
+          set({ customers: [], currentCustomerId: null });
+        }
       },
-      loginCustomer: (email, password) => {
-        const found = get().customers.find(
-          (c) => c.email.toLowerCase() === email.trim().toLowerCase() && c.password === password,
-        );
-        if (!found) return { ok: false, error: 'E-mail ou senha incorretos.' };
-        set({ currentCustomerId: found.id });
-        return { ok: true };
+
+      async registerCustomer(data) {
+        try {
+          const { user, token } = await authService.register({
+            name: data.name,
+            email: data.email,
+            password: data.password,
+            phone: data.phone,
+          });
+          setAuthToken('customer', token);
+          const c = apiUserToInternal(user);
+          if (data.defaultAddress) c.defaultAddress = data.defaultAddress;
+          set({ customers: [c], currentCustomerId: c.id });
+          // Puxa carrinho vazio recém-criado para o cliente novo.
+          void useCartStore.getState().fetch();
+          return { ok: true, customer: c };
+        } catch (err) {
+          const msg = err instanceof ApiError ? err.message : 'Erro ao criar conta.';
+          return { ok: false, error: msg };
+        }
       },
-      logoutCustomer: () => set({ currentCustomerId: null }),
-      updateCustomer: (patch) => {
+
+      async loginCustomer(email, password) {
+        try {
+          const { user, token } = await authService.login(email, password);
+          if (user.role !== 'CUSTOMER') {
+            return { ok: false, error: 'Esta conta não é de cliente.' };
+          }
+          setAuthToken('customer', token);
+          const c = apiUserToInternal(user);
+          set({ customers: [c], currentCustomerId: c.id });
+          void useCartStore.getState().fetch();
+          return { ok: true };
+        } catch (err) {
+          const msg = err instanceof ApiError ? err.message : 'E-mail ou senha inválidos.';
+          return { ok: false, error: msg };
+        }
+      },
+
+      logoutCustomer() {
+        setAuthToken('customer', null);
+        set({ customers: [], currentCustomerId: null });
+        useCartStore.getState().reset();
+      },
+
+      async updateCustomer(patch) {
         const id = get().currentCustomerId;
         if (!id) return;
+
+        // 1) Salva mudanças reais no backend (name/phone). O endpoint aceita
+        //    só esses dois campos — os demais (endereço padrão) ficam locais.
+        const remotePayload: { name?: string; phone?: string } = {};
+        if (patch.name !== undefined) remotePayload.name = patch.name;
+        if (patch.phone !== undefined) remotePayload.phone = patch.phone;
+
+        if (remotePayload.name !== undefined || remotePayload.phone !== undefined) {
+          try {
+            const { user } = await authService.updateMe(remotePayload);
+            const remote = apiUserToInternal(user);
+            set({
+              customers: get().customers.map((c) =>
+                c.id === id ? { ...c, ...remote, defaultAddress: patch.defaultAddress ?? c.defaultAddress } : c,
+              ),
+            });
+            return;
+          } catch {
+            // cai para atualização otimista local abaixo
+          }
+        }
+
+        // 2) Campos que ficam locais (defaultAddress).
         set({
-          customers: get().customers.map((c) =>
-            c.id === id ? { ...c, ...patch } : c,
-          ),
+          customers: get().customers.map((c) => (c.id === id ? { ...c, ...patch } : c)),
         });
       },
     }),
-    { name: '3dc-customer-auth' },
+    { name: '3dc-customer-auth', partialize: (s) => ({ customers: s.customers, currentCustomerId: s.currentCustomerId }) },
   ),
 );
 

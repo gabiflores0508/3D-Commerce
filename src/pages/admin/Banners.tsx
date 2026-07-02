@@ -4,7 +4,10 @@ import { Edit, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, Select, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { ImageUploader } from '@/components/admin/ImageUploader';
+import { RemoteImageUploader } from '@/components/admin/RemoteImageUploader';
+import { bannerService } from '@/services/bannerService';
+import { apiBannerToInternal } from '@/services/adapters';
+import { ApiError } from '@/services/api';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import type { Banner, HeroBadge } from '@/types';
 import { useSEO } from '@/utils/seo';
@@ -133,11 +136,39 @@ export default function Banners() {
               </div>
             </div>
             <div className="rounded-xl border border-ink-line p-3">
-              <ImageUploader
+              <RemoteImageUploader
                 label="Imagem do banner (opcional)"
-                value={editing.image}
-                onChange={(v) => setEditing({ ...editing, image: v })}
-                hint="Sobrepõe o gradiente quando preenchida. Upload demonstrativo, salvo no navegador."
+                value={editing.image || null}
+                onUpload={async (file) => {
+                  // Precisa que o banner exista no backend. Se ainda não foi salvo,
+                  // salvamos antes com os campos atuais e usamos o id retornado.
+                  let bannerId: string | undefined;
+                  const isNew = !banners.find((b) => b.id === editing.id);
+                  if (isNew) {
+                    try {
+                      const created = await addBanner(editing);
+                      bannerId = created?.id;
+                      if (created) setEditing({ ...editing, id: created.id });
+                    } catch (err) {
+                      throw new Error(err instanceof ApiError ? err.message : 'Falha ao salvar banner antes do upload.');
+                    }
+                  } else {
+                    bannerId = editing.id;
+                  }
+                  if (!bannerId) throw new Error('ID do banner indisponível.');
+                  try {
+                    const { banner } = await bannerService.uploadImage(bannerId, file);
+                    const internal = apiBannerToInternal(banner);
+                    setEditing({ ...editing, id: banner.id, image: internal.image });
+                    return internal.image;
+                  } catch (err) {
+                    throw new Error(err instanceof ApiError ? err.message : 'Falha no upload.');
+                  }
+                }}
+                onRemove={() => {
+                  setEditing({ ...editing, image: '' });
+                }}
+                hint="JPG/PNG/WEBP até 5MB. Sobrepõe o gradiente."
               />
             </div>
             {editing.position === 'hero' && (

@@ -1,11 +1,46 @@
+/**
+ * Store de dados administrativos — R9.
+ *
+ * Antes (R1-R8): seedava produtos/categorias/etc em localStorage.
+ * Agora: carrega da API real. Mantém a mesma "API pública" do store
+ * para preservar todos os componentes que já lêem `useAdminDataStore(s => s.products)`.
+ *
+ * Estratégia:
+ * - Chama `refresh()` no boot do app.
+ * - Mutações admin (add/update/remove) chamam a API e atualizam cache local.
+ * - `resetAll` faz refresh (não zera nada — dados agora vivem no banco).
+ */
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { seedBlogPosts } from '@/data/blogPosts'; // continua local (sem endpoint)
+import { seedFaqs } from '@/data/faqs'; // continua local (sem endpoint)
 import type { Banner, Category, Order, OrderStatus, Product, StoreSettings } from '@/types';
-import { seedProducts } from '@/data/products';
-import { seedCategories } from '@/data/categories';
-import { seedBanners } from '@/data/banners';
-import { seedOrders } from '@/data/orders';
-import { seedStoreSettings } from '@/data/storeSettings';
+import { productService } from '@/services/productService';
+import { categoryService } from '@/services/categoryService';
+import { bannerService } from '@/services/bannerService';
+import { orderService } from '@/services/orderService';
+import { settingsService } from '@/services/settingsService';
+import {
+  apiBannerToInternal,
+  apiCategoryToInternal,
+  apiOrderToInternal,
+  apiProductToInternal,
+  apiSettingsToInternal,
+  enumAdapters,
+} from '@/services/adapters';
+import type { ApiOrderStatus, ApiPurchaseMode } from '@/services/types';
+
+const DEFAULT_SETTINGS: StoreSettings = {
+  name: '3DCommerce',
+  whatsapp: '',
+  instagram: '',
+  email: '',
+  address: '',
+  cnpj: '',
+  about: '',
+  shippingNote: 'Enviamos para todo o Brasil',
+  freeShippingThreshold: 299,
+  pixDiscountPercent: 5,
+};
 
 interface AdminDataState {
   products: Product[];
@@ -13,62 +48,303 @@ interface AdminDataState {
   banners: Banner[];
   orders: Order[];
   settings: StoreSettings;
-  // Products
-  addProduct: (p: Product) => void;
-  updateProduct: (id: string, patch: Partial<Product>) => void;
-  removeProduct: (id: string) => void;
-  // Categories
-  addCategory: (c: Category) => void;
-  updateCategory: (id: string, patch: Partial<Category>) => void;
-  removeCategory: (id: string) => void;
+  ready: boolean;
+  loading: boolean;
+
+  refresh: () => Promise<void>;
+  refreshPublic: () => Promise<void>;
+  refreshAdmin: () => Promise<void>;
+
+  // Produtos
+  addProduct: (p: Product) => Promise<Product | null>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
+  removeProduct: (id: string) => Promise<void>;
+
+  // Categorias
+  addCategory: (c: Category) => Promise<Category | null>;
+  updateCategory: (id: string, patch: Partial<Category>) => Promise<void>;
+  removeCategory: (id: string) => Promise<void>;
+
   // Banners
-  addBanner: (b: Banner) => void;
-  updateBanner: (id: string, patch: Partial<Banner>) => void;
-  removeBanner: (id: string) => void;
+  addBanner: (b: Banner) => Promise<Banner | null>;
+  updateBanner: (id: string, patch: Partial<Banner>) => Promise<void>;
+  removeBanner: (id: string) => Promise<void>;
+
   // Orders
   addOrder: (o: Order) => void;
-  updateOrderStatus: (id: string, status: OrderStatus) => void;
+  updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
+
   // Settings
-  updateSettings: (patch: Partial<StoreSettings>) => void;
-  // Reset
-  resetAll: () => void;
+  updateSettings: (patch: Partial<StoreSettings>) => Promise<void>;
+
+  resetAll: () => Promise<void>;
 }
 
-const initial = {
-  products: seedProducts,
-  categories: seedCategories,
-  banners: seedBanners,
-  orders: seedOrders,
-  settings: seedStoreSettings,
-};
+/** Mantido para compat com blog/faqs que continuam locais. */
+export { seedBlogPosts, seedFaqs };
 
-export const useAdminDataStore = create<AdminDataState>()(
-  persist(
-    (set, get) => ({
-      ...initial,
-      addProduct: (p) => set({ products: [p, ...get().products] }),
-      updateProduct: (id, patch) =>
-        set({ products: get().products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }),
-      removeProduct: (id) => set({ products: get().products.filter((p) => p.id !== id) }),
+function purchaseModeToApi(pm: Product['purchaseMode']): ApiPurchaseMode {
+  return enumAdapters.purchaseModeToApi(pm);
+}
 
-      addCategory: (c) => set({ categories: [...get().categories, c] }),
-      updateCategory: (id, patch) =>
-        set({ categories: get().categories.map((c) => (c.id === id ? { ...c, ...patch } : c)) }),
-      removeCategory: (id) => set({ categories: get().categories.filter((c) => c.id !== id) }),
+export const useAdminDataStore = create<AdminDataState>((set, get) => ({
+  products: [],
+  categories: [],
+  banners: [],
+  orders: [],
+  settings: DEFAULT_SETTINGS,
+  ready: false,
+  loading: false,
 
-      addBanner: (b) => set({ banners: [...get().banners, b] }),
-      updateBanner: (id, patch) =>
-        set({ banners: get().banners.map((b) => (b.id === id ? { ...b, ...patch } : b)) }),
-      removeBanner: (id) => set({ banners: get().banners.filter((b) => b.id !== id) }),
+  async refresh() {
+    if (get().loading) return;
+    set({ loading: true });
+    try {
+      // 1) Sempre carrega dados públicos (settings, categorias, produtos, banners).
+      await get().refreshPublic();
+      // 2) Se admin estiver logado, carrega dados admin também.
+      await get().refreshAdmin();
+    } finally {
+      set({ ready: true, loading: false });
+    }
+  },
 
-      addOrder: (o) => set({ orders: [o, ...get().orders] }),
-      updateOrderStatus: (id, status) =>
-        set({ orders: get().orders.map((o) => (o.id === id ? { ...o, status } : o)) }),
+  async refreshPublic() {
+    try {
+      const [{ settings }, { categories: cats }, prodResp, bannersResp] = await Promise.all([
+        settingsService.getPublic(),
+        categoryService.listPublic(),
+        productService.listPublic({ limit: 100 }),
+        bannerService.listPublic(),
+      ]);
+      set({
+        settings: apiSettingsToInternal(settings),
+        categories: cats.map((c, i) => apiCategoryToInternal(c, i)),
+        products: prodResp.products.map(apiProductToInternal),
+        banners: bannersResp.banners.map(apiBannerToInternal),
+      });
+    } catch {
+      // Falha silenciosa — mantém defaults. Componentes mostram empty states.
+    }
+  },
 
-      updateSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
+  async refreshAdmin() {
+    try {
+      // Só faz sentido se admin token existir.
+      const [prod, cats, banners, orders] = await Promise.all([
+        productService.listAdmin({ limit: 100 }).catch(() => null),
+        categoryService.listAdmin().catch(() => null),
+        bannerService.listAdmin().catch(() => null),
+        orderService.listAdmin({ limit: 100 }).catch(() => null),
+      ]);
+      const patch: Partial<AdminDataState> = {};
+      if (prod) patch.products = prod.products.map(apiProductToInternal);
+      if (cats) patch.categories = cats.categories.map((c, i) => apiCategoryToInternal(c, i));
+      if (banners) patch.banners = banners.banners.map(apiBannerToInternal);
+      if (orders) patch.orders = orders.orders.map(apiOrderToInternal);
+      set(patch);
+    } catch {
+      // ignora
+    }
+  },
 
-      resetAll: () => set({ ...initial }),
-    }),
-    { name: '3dc-admin-data' },
-  ),
-);
+  // -------------------------- Produtos --------------------------------------
+  async addProduct(p) {
+    try {
+      const { product } = await productService.create({
+        categoryId: p.categoryIds[0] ?? '',
+        name: p.name,
+        slug: p.slug || undefined,
+        shortDescription: p.shortDescription,
+        description: p.description,
+        price: p.price,
+        promotionalPrice: p.promoPrice ?? null,
+        stock: p.stock,
+        active: p.active,
+        featured: p.isHighlight || p.isBestSeller,
+        purchaseMode: purchaseModeToApi(p.purchaseMode),
+        material: p.material === '-' ? null : p.material ?? null,
+      });
+      const created = apiProductToInternal(product);
+      set({ products: [created, ...get().products] });
+      return created;
+    } catch {
+      return null;
+    }
+  },
+
+  async updateProduct(id, patch) {
+    const payload: Record<string, unknown> = {};
+    if (patch.name !== undefined) payload.name = patch.name;
+    if (patch.description !== undefined) payload.description = patch.description;
+    if (patch.shortDescription !== undefined) payload.shortDescription = patch.shortDescription;
+    if (patch.price !== undefined) payload.price = patch.price;
+    if (patch.promoPrice !== undefined) payload.promotionalPrice = patch.promoPrice ?? null;
+    if (patch.stock !== undefined) payload.stock = patch.stock;
+    if (patch.active !== undefined) payload.active = patch.active;
+    if (patch.isHighlight !== undefined || patch.isBestSeller !== undefined) {
+      payload.featured = patch.isHighlight ?? patch.isBestSeller;
+    }
+    if (patch.purchaseMode !== undefined) payload.purchaseMode = purchaseModeToApi(patch.purchaseMode);
+    if (patch.categoryIds !== undefined && patch.categoryIds[0]) payload.categoryId = patch.categoryIds[0];
+    if (patch.material !== undefined) payload.material = patch.material === '-' ? null : patch.material;
+
+    try {
+      const { product } = await productService.update(id, payload);
+      const updated = apiProductToInternal(product);
+      set({ products: get().products.map((p) => (p.id === id ? updated : p)) });
+    } catch {
+      // toasts já são disparados no componente que chama
+    }
+  },
+
+  async removeProduct(id) {
+    try {
+      await productService.remove(id);
+      // soft delete: reduz do cache também
+      set({ products: get().products.filter((p) => p.id !== id) });
+    } catch {
+      // ignora
+    }
+  },
+
+  // -------------------------- Categorias -----------------------------------
+  async addCategory(c) {
+    try {
+      const { category } = await categoryService.create({
+        name: c.name,
+        slug: c.slug || undefined,
+        description: c.description ?? null,
+        active: c.showInMenu,
+        isSeasonal: !!c.isSeasonal,
+        seasonalTitle: c.seasonalBanner ?? null,
+        seasonalBannerImage: c.seasonalBannerImage ?? null,
+      });
+      const created = apiCategoryToInternal(category, get().categories.length);
+      set({ categories: [...get().categories, created] });
+      return created;
+    } catch {
+      return null;
+    }
+  },
+
+  async updateCategory(id, patch) {
+    const payload: Record<string, unknown> = {};
+    if (patch.name !== undefined) payload.name = patch.name;
+    if (patch.slug !== undefined) payload.slug = patch.slug;
+    if (patch.description !== undefined) payload.description = patch.description ?? null;
+    if (patch.showInMenu !== undefined) payload.active = patch.showInMenu;
+    if (patch.isSeasonal !== undefined) payload.isSeasonal = patch.isSeasonal;
+    if (patch.seasonalBanner !== undefined) payload.seasonalTitle = patch.seasonalBanner ?? null;
+    if (patch.seasonalBannerImage !== undefined) payload.seasonalBannerImage = patch.seasonalBannerImage ?? null;
+
+    try {
+      const { category } = await categoryService.update(id, payload);
+      const updated = apiCategoryToInternal(category, 0);
+      set({ categories: get().categories.map((c) => (c.id === id ? { ...c, ...updated } : c)) });
+    } catch {
+      // ignora
+    }
+  },
+
+  async removeCategory(id) {
+    try {
+      await categoryService.remove(id);
+      set({ categories: get().categories.filter((c) => c.id !== id) });
+    } catch {
+      // ignora
+    }
+  },
+
+  // -------------------------- Banners --------------------------------------
+  async addBanner(b) {
+    try {
+      const { banner } = await bannerService.create({
+        title: b.title,
+        subtitle: b.subtitle ?? null,
+        imageUrl: b.image || null,
+        buttonText: b.ctaLabel ?? null,
+        buttonLink: b.ctaLink ?? null,
+        active: b.active,
+        position: b.order,
+      });
+      const created = apiBannerToInternal(banner);
+      set({ banners: [...get().banners, created] });
+      return created;
+    } catch {
+      return null;
+    }
+  },
+
+  async updateBanner(id, patch) {
+    const payload: Record<string, unknown> = {};
+    if (patch.title !== undefined) payload.title = patch.title;
+    if (patch.subtitle !== undefined) payload.subtitle = patch.subtitle ?? null;
+    if (patch.ctaLabel !== undefined) payload.buttonText = patch.ctaLabel ?? null;
+    if (patch.ctaLink !== undefined) payload.buttonLink = patch.ctaLink ?? null;
+    if (patch.image !== undefined) payload.imageUrl = patch.image || null;
+    if (patch.active !== undefined) payload.active = patch.active;
+    if (patch.order !== undefined) payload.position = patch.order;
+    try {
+      const { banner } = await bannerService.update(id, payload);
+      const updated = apiBannerToInternal(banner);
+      set({ banners: get().banners.map((b) => (b.id === id ? updated : b)) });
+    } catch {
+      // ignora
+    }
+  },
+
+  async removeBanner(id) {
+    try {
+      await bannerService.remove(id);
+      set({ banners: get().banners.filter((b) => b.id !== id) });
+    } catch {
+      // ignora
+    }
+  },
+
+  // -------------------------- Orders ---------------------------------------
+  addOrder(o) {
+    // Chamado pelo Checkout somente como "otimista" — a lista real vem via refreshAdmin.
+    set({ orders: [o, ...get().orders] });
+  },
+
+  async updateOrderStatus(id, status) {
+    try {
+      const apiStatus: ApiOrderStatus = enumAdapters.orderStatusToApi(status);
+      const { order } = await orderService.updateStatus(id, { status: apiStatus });
+      const updated = apiOrderToInternal(order);
+      set({ orders: get().orders.map((o) => (o.id === id ? updated : o)) });
+    } catch {
+      // ignora
+    }
+  },
+
+  // -------------------------- Settings -------------------------------------
+  async updateSettings(patch) {
+    const payload: Record<string, unknown> = {};
+    if (patch.name !== undefined) payload.storeName = patch.name;
+    if (patch.whatsapp !== undefined) payload.whatsapp = patch.whatsapp;
+    if (patch.email !== undefined) payload.email = patch.email;
+    if (patch.instagram !== undefined) payload.instagram = patch.instagram || null;
+    if (patch.address !== undefined) payload.address = patch.address;
+    if (patch.cnpj !== undefined) payload.cnpj = patch.cnpj || null;
+    if (patch.about !== undefined) payload.aboutText = patch.about || null;
+    if (patch.shippingNote !== undefined) payload.shippingNote = patch.shippingNote || null;
+    if (patch.freeShippingThreshold !== undefined) payload.freeShippingThreshold = patch.freeShippingThreshold;
+    if (patch.pixDiscountPercent !== undefined) payload.pixDiscountPercent = patch.pixDiscountPercent;
+    if (patch.logo !== undefined) payload.logoUrl = patch.logo || null;
+
+    try {
+      const { settings } = await settingsService.update(payload);
+      set({ settings: apiSettingsToInternal(settings) });
+    } catch {
+      // ignora
+    }
+  },
+
+  async resetAll() {
+    // Não zera nada real. Só refetch do banco.
+    await get().refresh();
+  },
+}));

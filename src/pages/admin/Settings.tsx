@@ -6,7 +6,10 @@ import { Save } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, Textarea } from '@/components/ui/Input';
-import { ImageUploader } from '@/components/admin/ImageUploader';
+import { RemoteImageUploader } from '@/components/admin/RemoteImageUploader';
+import { settingsService } from '@/services/settingsService';
+import { apiSettingsToInternal } from '@/services/adapters';
+import { ApiError } from '@/services/api';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import type { StoreSettings } from '@/types';
 import { useSEO } from '@/utils/seo';
@@ -54,11 +57,30 @@ export default function Settings() {
             <div><Label>CNPJ</Label><Input {...register('cnpj')} error={errors.cnpj?.message} /></div>
           </div>
           <div className="rounded-xl border border-ink-line p-3">
-            <ImageUploader
+            <RemoteImageUploader
               label="Logo da loja (opcional)"
-              value={logo}
-              onChange={setLogo}
-              hint="Sobrepõe o logo padrão no header e footer quando preenchida."
+              value={logo || null}
+              onUpload={async (file) => {
+                try {
+                  const { settings: s } = await settingsService.uploadLogo(file);
+                  const internal = apiSettingsToInternal(s);
+                  const url = internal.logo ?? '';
+                  setLogo(url);
+                  return url;
+                } catch (err) {
+                  throw new Error(err instanceof ApiError ? err.message : 'Falha no upload.');
+                }
+              }}
+              onRemove={async () => {
+                try {
+                  const { settings: s } = await settingsService.update({ logoUrl: null });
+                  const internal = apiSettingsToInternal(s);
+                  setLogo(internal.logo ?? '');
+                } catch (err) {
+                  throw new Error(err instanceof ApiError ? err.message : 'Erro ao remover logo.');
+                }
+              }}
+              hint="JPG/PNG/WEBP até 5MB. Sobrepõe o logo padrão no header e footer."
             />
           </div>
           <div>

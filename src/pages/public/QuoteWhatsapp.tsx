@@ -8,11 +8,14 @@ import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { useState } from 'react';
 import { useSEO } from '@/utils/seo';
 import toast from 'react-hot-toast';
+import { quoteService } from '@/services/quoteService';
+import { ApiError } from '@/services/api';
+import { Paperclip, Send, X } from 'lucide-react';
 
 const schema = z.object({
   name: z.string().min(3, 'Informe seu nome'),
   phone: z.string().min(10, 'Telefone inválido'),
-  email: z.string().email('E-mail inválido').optional().or(z.literal('')),
+  email: z.string().email('E-mail inválido'),
   description: z.string().min(10, 'Descreva o projeto'),
   deadline: z.string().optional(),
 });
@@ -25,24 +28,73 @@ export default function QuoteWhatsapp() {
   const settingsPhone = useAdminDataStore((s) => s.settings.whatsapp);
   const quoteProducts = products.filter((p) => p.purchaseMode !== 'direct');
   const [selected, setSelected] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [successId, setSuccessId] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
-  function onSubmit(data: FormData) {
-    const names = selected.map((id) => products.find((p) => p.id === id)?.name).filter(Boolean) as string[];
-    const message =
-      `Olá, 3DCommerce! Gostaria de solicitar um orçamento.\n\n` +
-      `Nome: ${data.name}\n` +
-      `Telefone: ${data.phone}\n` +
-      (data.email ? `E-mail: ${data.email}\n` : '') +
-      (data.deadline ? `Prazo desejado: ${data.deadline}\n` : '') +
-      `\nDescrição:\n${data.description}\n` +
-      (names.length ? `\nProdutos de interesse:\n${names.map((n) => `• ${n}`).join('\n')}` : '');
-    const url = `https://wa.me/${settingsPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-    toast.success('Abrindo WhatsApp...');
+  function pickFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    if (!list) return;
+    const next: File[] = [...files];
+    for (let i = 0; i < list.length && next.length < 10; i++) next.push(list[i]);
+    setFiles(next);
+    e.target.value = '';
+  }
+  function removeFile(idx: number) {
+    setFiles(files.filter((_, i) => i !== idx));
+  }
+
+  async function onSubmit(data: FormData) {
+    const selectedProducts = selected
+      .map((id) => products.find((p) => p.id === id)?.name)
+      .filter(Boolean) as string[];
+    const title = selectedProducts.length
+      ? `Orçamento — ${selectedProducts[0]}${selectedProducts.length > 1 ? ' + outros' : ''}`
+      : 'Orçamento personalizado';
+    const description =
+      data.description +
+      (selectedProducts.length
+        ? `\n\nProdutos de interesse:\n${selectedProducts.map((n) => `- ${n}`).join('\n')}`
+        : '');
+
+    setSubmitting(true);
+    try {
+      const { quote } = await quoteService.create({
+        customerName: data.name,
+        customerEmail: data.email,
+        customerPhone: data.phone,
+        title,
+        description,
+        deadline: data.deadline || null,
+      });
+      if (files.length > 0) {
+        try {
+          await quoteService.uploadFiles(quote.id, files);
+        } catch (err) {
+          const msg = err instanceof ApiError ? err.message : 'Falha ao enviar arquivos.';
+          toast.error(msg);
+        }
+      }
+      setSuccessId(quote.id);
+      setFiles([]);
+      setSelected([]);
+      reset();
+      toast.success('Orçamento enviado! Entraremos em contato.');
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Erro ao enviar orçamento.';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function openWhatsappBackup() {
+    const message = `Olá, 3DCommerce! Gostaria de solicitar um orçamento.`;
+    window.open(`https://wa.me/${settingsPhone}?text=${encodeURIComponent(message)}`, '_blank');
   }
 
   function toggle(id: string) {
@@ -110,9 +162,47 @@ export default function QuoteWhatsapp() {
               </div>
             )}
 
-            <Button type="submit" variant="whatsapp" size="lg">
-              <MessageCircle className="h-4 w-4" /> Enviar pelo WhatsApp
-            </Button>
+            <div>
+              <Label>Arquivos (STL, OBJ, ZIP, PDF ou imagens — até 25MB cada)</Label>
+              <label className="mt-1 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-ink-line bg-bg-soft px-4 py-3 text-sm text-ink-soft hover:bg-ink/5">
+                <Paperclip className="h-4 w-4" />
+                Adicionar arquivos
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept=".stl,.obj,.zip,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp,application/pdf,application/zip,application/octet-stream"
+                  onChange={pickFiles}
+                />
+              </label>
+              {files.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs">
+                  {files.map((f, i) => (
+                    <li key={i} className="flex items-center justify-between rounded-lg bg-bg-soft px-3 py-1.5">
+                      <span className="truncate">{f.name} · {Math.round(f.size / 1024)}kb</span>
+                      <button type="button" onClick={() => removeFile(i)} aria-label="Remover">
+                        <X className="h-3.5 w-3.5 text-ink-mute" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {successId && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                Orçamento <strong>{successId}</strong> recebido. Nosso time entrará em contato em breve.
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="lg" loading={submitting} disabled={submitting}>
+                <Send className="h-4 w-4" /> Enviar orçamento
+              </Button>
+              <Button type="button" variant="whatsapp" size="lg" onClick={openWhatsappBackup}>
+                <MessageCircle className="h-4 w-4" /> Falar no WhatsApp
+              </Button>
+            </div>
           </form>
         </div>
 

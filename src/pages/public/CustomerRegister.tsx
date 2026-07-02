@@ -40,9 +40,9 @@ export default function CustomerRegister() {
 
   if (isLogged) return <Navigate to="/minha-conta" replace />;
 
-  function onSubmit(d: Data) {
+  async function onSubmit(d: Data) {
     const hasAddress = d.cep && d.street && d.number && d.district && d.city && d.state;
-    const r = registerCustomer({
+    const r = await registerCustomer({
       name: d.name,
       email: d.email,
       phone: d.phone,

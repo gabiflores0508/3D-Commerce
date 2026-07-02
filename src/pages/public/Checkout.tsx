@@ -12,9 +12,12 @@ import { Input, Label, Select } from '@/components/ui/Input';
 import { formatBRL } from '@/utils/price';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSEO } from '@/utils/seo';
-import type { Order, OrderItem } from '@/types';
 import { useCurrentCustomer } from '@/store/useCustomerAuthStore';
 import { maskPhone, maskCPF, maskCEP } from '@/utils/masks';
+import { orderService } from '@/services/orderService';
+import { ApiError } from '@/services/api';
+import { apiOrderToInternal } from '@/services/adapters';
+import type { ApiPaymentMethod } from '@/services/types';
 
 const customerSchema = z.object({
   name: z.string().min(3, 'Informe seu nome completo'),
@@ -201,47 +204,49 @@ export default function Checkout() {
               installments={installments}
               total={total}
               onBack={() => setStep(3)}
-              onConfirm={() => {
-                const id = `#3DC-${String(Math.floor(1000 + Math.random() * 9000))}`;
-                const orderItems: OrderItem[] = items.map((it) => {
-                  const p = products.find((x) => x.id === it.productId);
-                  return {
-                    productId: it.productId,
-                    name: p?.name ?? 'Produto',
-                    image: p?.images[0] ?? '',
-                    variationLabel: it.variationLabel,
-                    qty: it.qty,
-                    unitPrice: p ? p.promoPrice ?? p.price : 0,
-                  };
-                });
-                const order: Order = {
-                  id,
-                  createdAt: new Date().toISOString(),
-                  customerId: loggedCustomer?.id,
-                  customer,
-                  address,
-                  items: orderItems,
-                  shipping: {
-                    method: shippingPrices[shipping].label,
-                    price: shippingPrices[shipping].price,
-                    deadline: shippingPrices[shipping].deadline,
-                  },
-                  payment: {
-                    method: payment,
-                    installments: payment === 'credito' ? installments : undefined,
-                  },
-                  coupon: coupon
-                    ? { code: coupon, discount }
-                    : undefined,
-                  subtotal,
-                  total,
-                  status: payment === 'boleto' ? 'aguardando-pagamento' : 'novo',
+              onConfirm={async () => {
+                if (!loggedCustomer) {
+                  toast.error('Faça login para finalizar a compra.');
+                  return;
+                }
+                const paymentMap: Record<PaymentMethod, ApiPaymentMethod> = {
+                  pix: 'PIX',
+                  credito: 'CREDIT_CARD',
+                  boleto: 'BOLETO',
                 };
-                addOrder(order);
-                toast.success(`Pedido ${id} confirmado!`);
-                clear();
-                setDone(id);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                try {
+                  const { order } = await orderService.create({
+                    customerName: customer.name,
+                    customerEmail: customer.email,
+                    customerPhone: customer.phone,
+                    address: {
+                      recipientName: customer.name,
+                      phone: customer.phone,
+                      zipCode: address.cep,
+                      street: address.street,
+                      number: address.number,
+                      complement: address.complement ?? null,
+                      district: address.district,
+                      city: address.city,
+                      state: address.state,
+                      country: 'Brasil',
+                    },
+                    shippingValue: shippingPrices[shipping].price,
+                    discountValue: discount,
+                    paymentMethod: paymentMap[payment],
+                    notes: null,
+                  });
+                  // Otimista: espelha no store admin.
+                  addOrder(apiOrderToInternal(order));
+                  toast.success(`Pedido confirmado!`);
+                  // Backend já limpou o carrinho — refaz fetch para atualizar UI.
+                  await clear();
+                  setDone(order.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                } catch (err) {
+                  const msg = err instanceof ApiError ? err.message : 'Erro ao criar pedido.';
+                  toast.error(msg);
+                }
               }}
             />
           )}

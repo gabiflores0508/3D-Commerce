@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Tags, Sparkles, Image, ShoppingCart, Settings, LogOut, Plus } from 'lucide-react';
+import { LayoutDashboard, Package, Tags, Sparkles, Image, ShoppingCart, Settings, LogOut, Plus, FileText, MessageSquareQuote } from 'lucide-react';
 import { useAdminAuthStore } from '@/store/useAdminAuthStore';
 import { Logo } from '@/components/ui/Logo';
 
@@ -11,6 +11,8 @@ const items = [
   { to: '/admin/categoria-sazonal', label: 'Categoria Sazonal', icon: Sparkles },
   { to: '/admin/banners', label: 'Banners', icon: Image },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
+  { to: '/admin/orcamentos', label: 'Orçamentos', icon: FileText },
+  { to: '/admin/depoimentos', label: 'Depoimentos', icon: MessageSquareQuote },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
