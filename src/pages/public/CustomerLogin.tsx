@@ -61,9 +61,6 @@ export default function CustomerLogin() {
           <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
             Entrar
           </Button>
-          <p className="rounded-xl bg-bg-soft p-3 text-[11px] leading-relaxed text-ink-mute">
-            Área demonstrativa: os dados são salvos apenas neste navegador.
-          </p>
         </form>
 
         <div className="mt-5 flex flex-col items-center gap-2 text-sm">

@@ -144,10 +144,6 @@ export default function CustomerRegister() {
             </div>
           </section>
 
-          <p className="rounded-xl bg-bg-soft p-3 text-[11px] leading-relaxed text-ink-mute">
-            Área demonstrativa: os dados são salvos apenas neste navegador.
-          </p>
-
           <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
             Criar conta
           </Button>
