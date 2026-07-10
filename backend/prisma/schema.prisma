@@ -70,6 +70,23 @@ enum ContactMessageStatus {
   ARCHIVED
 }
 
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+enum ScriptCategory {
+  COUPON
+  POST_SALE
+  QUOTE_RECOVERY
+  LAUNCH
+  SEASONAL_OFFER
+  FREE_SHIPPING
+  FEATURED_PRODUCT
+  RETURNING_CUSTOMER
+}
+
 // =========================================================================
 // Usuários e endereços
 // =========================================================================
@@ -230,33 +247,40 @@ model CartItem {
 // =========================================================================
 
 model Order {
-  id              String        @id @default(cuid())
-  userId          String?       @map("user_id")
+  id                 String              @id @default(cuid())
+  userId             String?             @map("user_id")
   // Snapshot do cliente — preserva histórico mesmo se o User mudar.
-  customerName    String        @map("customer_name")
-  customerEmail   String        @map("customer_email")
-  customerPhone   String        @map("customer_phone")
+  customerName       String              @map("customer_name")
+  customerEmail      String              @map("customer_email")
+  customerPhone      String              @map("customer_phone")
   // Snapshot do endereço (JSON). Estrutura:
   // { recipientName, zipCode, street, number, complement?, district, city, state, country }
-  addressSnapshot Json          @map("address_snapshot")
-  subtotal        Decimal       @db.Decimal(12, 2)
-  shippingValue   Decimal       @default(0) @map("shipping_value") @db.Decimal(12, 2)
-  discountValue   Decimal       @default(0) @map("discount_value") @db.Decimal(12, 2)
-  total           Decimal       @db.Decimal(12, 2)
-  status          OrderStatus   @default(PENDING)
-  paymentMethod   PaymentMethod @map("payment_method")
-  paymentStatus   PaymentStatus @default(PENDING) @map("payment_status")
-  notes           String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  addressSnapshot    Json                @map("address_snapshot")
+  subtotal           Decimal             @db.Decimal(12, 2)
+  shippingValue      Decimal             @default(0) @map("shipping_value") @db.Decimal(12, 2)
+  discountValue      Decimal             @default(0) @map("discount_value") @db.Decimal(12, 2)
+  total              Decimal             @db.Decimal(12, 2)
+  status             OrderStatus         @default(PENDING)
+  paymentMethod      PaymentMethod       @map("payment_method")
+  paymentStatus      PaymentStatus       @default(PENDING) @map("payment_status")
+  notes              String?
+  // Cupom aplicado — snapshot preserva o histórico mesmo que o cupom mude/some.
+  // `discountValue` acima guarda o valor real descontado em R$.
+  couponId           String?             @map("coupon_id")
+  couponCode         String?             @map("coupon_code")
+  couponDiscountType CouponDiscountType? @map("coupon_discount_type")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
 
-  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items OrderItem[]
+  user   User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  coupon Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items  OrderItem[]
 
   @@index([userId])
   @@index([status])
   @@index([paymentStatus])
   @@index([createdAt])
+  @@index([couponId])
   @@map("orders")
 }
 
@@ -332,25 +356,64 @@ model QuoteFile {
 
 model SiteSettings {
   // Constante: garantimos um único registro com id fixo "main".
-  id                    String   @id @default("main")
-  storeName             String   @map("store_name")
+  id                    String  @id @default("main")
+  storeName             String  @map("store_name")
   whatsapp              String
   email                 String
   instagram             String?
   address               String
   cnpj                  String?
-  logoUrl               String?  @map("logo_url")
-  heroTitle             String?  @map("hero_title")
-  heroSubtitle          String?  @map("hero_subtitle")
-  aboutTitle            String?  @map("about_title")
-  aboutText             String?  @map("about_text")
-  seoTitle              String?  @map("seo_title")
-  seoDescription        String?  @map("seo_description")
-  pixDiscountPercent    Decimal  @default(5) @map("pix_discount_percent") @db.Decimal(5, 2)
-  freeShippingThreshold Decimal  @default(299) @map("free_shipping_threshold") @db.Decimal(12, 2)
-  shippingNote          String?  @map("shipping_note")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  logoUrl               String? @map("logo_url")
+  heroTitle             String? @map("hero_title")
+  heroSubtitle          String? @map("hero_subtitle")
+  aboutTitle            String? @map("about_title")
+  aboutText             String? @map("about_text")
+  seoTitle              String? @map("seo_title")
+  seoDescription        String? @map("seo_description")
+  pixDiscountPercent    Decimal @default(5) @map("pix_discount_percent") @db.Decimal(5, 2)
+  freeShippingThreshold Decimal @default(299) @map("free_shipping_threshold") @db.Decimal(12, 2)
+  shippingNote          String? @map("shipping_note")
+
+  // --- Conteúdos editáveis (R17) ---
+  // Redes sociais
+  instagramHandle String? @map("instagram_handle")
+  youtubeUrl      String? @map("youtube_url")
+  youtubeHandle   String? @map("youtube_handle")
+  facebookUrl     String? @map("facebook_url")
+  tiktokUrl       String? @map("tiktok_url")
+
+  // Seção comunidade (Instagram)
+  communityInstagramEnabled  Boolean @default(true) @map("community_instagram_enabled")
+  communityInstagramTitle    String? @map("community_instagram_title")
+  communityInstagramSubtitle String? @map("community_instagram_subtitle")
+
+  // Seção YouTube
+  youtubeSectionEnabled  Boolean @default(true) @map("youtube_section_enabled")
+  youtubeSectionTitle    String? @map("youtube_section_title")
+  youtubeSectionSubtitle String? @map("youtube_section_subtitle")
+  youtubeChannelUrl      String? @map("youtube_channel_url")
+  youtubeChannelLabel    String? @map("youtube_channel_label")
+  youtubeVideosJson      Json?   @map("youtube_videos_json")
+
+  // Newsletter
+  newsletterEnabled        Boolean @default(true) @map("newsletter_enabled")
+  newsletterEyebrow        String? @map("newsletter_eyebrow")
+  newsletterTitle          String? @map("newsletter_title")
+  newsletterDescription    String? @map("newsletter_description")
+  newsletterButtonText     String? @map("newsletter_button_text")
+  newsletterPlaceholder    String? @map("newsletter_placeholder")
+  newsletterSuccessMessage String? @map("newsletter_success_message")
+
+  // Blocos de confiança
+  trustBlockEnabled Boolean @default(true) @map("trust_block_enabled")
+  trustItemsJson    Json?   @map("trust_items_json")
+
+  // Footer
+  footerDescription String? @map("footer_description")
+  footerShowSocials Boolean @default(true) @map("footer_show_socials")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("site_settings")
 }
@@ -401,4 +464,60 @@ model ContactMessage {
   @@index([status])
   @@index([createdAt])
   @@map("contact_messages")
+}
+
+// =========================================================================
+// Cupons de desconto e scripts de mensagem (WhatsApp manual)
+// =========================================================================
+
+model Coupon {
+  id                    String             @id @default(cuid())
+  code                  String             @unique
+  name                  String
+  description           String?
+  discountType          CouponDiscountType @map("discount_type")
+  // Valor do desconto: % (0–100) para PERCENTAGE, valor em R$ para FIXED_AMOUNT,
+  // ignorado (0) para FREE_SHIPPING.
+  discountValue         Decimal            @default(0) @map("discount_value") @db.Decimal(12, 2)
+  minOrderValue         Decimal?           @map("min_order_value") @db.Decimal(12, 2)
+  // Teto de desconto (usado principalmente para PERCENTAGE).
+  maxDiscountValue      Decimal?           @map("max_discount_value") @db.Decimal(12, 2)
+  startsAt              DateTime?          @map("starts_at")
+  expiresAt             DateTime?          @map("expires_at")
+  usageLimit            Int?               @map("usage_limit")
+  usageCount            Int                @default(0) @map("usage_count")
+  usageLimitPerCustomer Int?               @map("usage_limit_per_customer")
+  isActive              Boolean            @default(true) @map("is_active")
+  isSeasonal            Boolean            @default(false) @map("is_seasonal")
+  seasonalName          String?            @map("seasonal_name")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  scripts CouponScript[]
+  orders  Order[]
+
+  @@index([isActive])
+  @@index([code])
+  @@map("coupons")
+}
+
+model CouponScript {
+  id              String         @id @default(cuid())
+  title           String
+  description     String?
+  messageTemplate String         @map("message_template")
+  category        ScriptCategory @default(COUPON)
+  linkedCouponId  String?        @map("linked_coupon_id")
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Um script pode ter no máximo um cupom vinculado; o cupom pode ter vários scripts.
+  // SetNull: remover o cupom não apaga o script, só desvincula.
+  linkedCoupon Coupon? @relation(fields: [linkedCouponId], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([linkedCouponId])
+  @@index([isActive])
+  @@map("coupon_scripts")
 }

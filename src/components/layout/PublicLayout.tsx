@@ -21,7 +21,9 @@ export function PublicLayout() {
   }, [pathname, setCartOpen, setMobileMenuOpen]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // overflow-x-clip: contém qualquer transbordo horizontal de elementos
+    // decorativos (blobs) sem afetar rolagem vertical nem sticky (R17).
+    <div className="flex min-h-screen flex-col overflow-x-clip">
       <Topbar />
       <Header />
       <main className="flex-1">

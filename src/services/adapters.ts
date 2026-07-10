@@ -146,6 +146,24 @@ export function apiBannerToInternal(b: ApiBanner): Banner {
 
 // ------ settings ------------------------------------------------------------
 
+/**
+ * Fallbacks de conteúdo editável (R17). Único lugar com textos padrão — usados
+ * quando o admin ainda não preencheu o campo. Evita textos fixos espalhados.
+ */
+export const CONTENT_DEFAULTS = {
+  communityInstagramTitle: 'Acompanhe no Instagram',
+  communityInstagramSubtitle: '',
+  youtubeSectionTitle: 'Assista no YouTube',
+  youtubeSectionSubtitle: 'Veja dicas, novidades e projetos em impressão 3D.',
+  youtubeChannelLabel: 'Ver canal',
+  newsletterEyebrow: 'Novidades',
+  newsletterTitle: 'Receba ofertas e novidades da 3DCommerce',
+  newsletterDescription: 'Cupons, novos filamentos e impressoras em primeira mão.',
+  newsletterButtonText: 'Inscrever',
+  newsletterPlaceholder: 'Seu e-mail',
+  newsletterSuccessMessage: 'Inscrição realizada! Obrigado.',
+} as const;
+
 export function apiSettingsToInternal(s: ApiSettings): StoreSettings {
   return {
     name: s.storeName,
@@ -159,6 +177,42 @@ export function apiSettingsToInternal(s: ApiSettings): StoreSettings {
     freeShippingThreshold: s.freeShippingThreshold,
     pixDiscountPercent: s.pixDiscountPercent,
     logo: s.logoUrl ? apiAssetUrl(s.logoUrl) : undefined,
+    // R17
+    instagramHandle: s.instagramHandle ?? '',
+    youtubeUrl: s.youtubeUrl ?? '',
+    youtubeHandle: s.youtubeHandle ?? '',
+    facebookUrl: s.facebookUrl ?? '',
+    tiktokUrl: s.tiktokUrl ?? '',
+    communityInstagramEnabled: s.communityInstagramEnabled,
+    communityInstagramTitle: s.communityInstagramTitle || CONTENT_DEFAULTS.communityInstagramTitle,
+    communityInstagramSubtitle: s.communityInstagramSubtitle ?? CONTENT_DEFAULTS.communityInstagramSubtitle,
+    youtubeSectionEnabled: s.youtubeSectionEnabled,
+    youtubeSectionTitle: s.youtubeSectionTitle || CONTENT_DEFAULTS.youtubeSectionTitle,
+    youtubeSectionSubtitle: s.youtubeSectionSubtitle || CONTENT_DEFAULTS.youtubeSectionSubtitle,
+    youtubeChannelUrl: s.youtubeChannelUrl ?? '',
+    youtubeChannelLabel: s.youtubeChannelLabel || CONTENT_DEFAULTS.youtubeChannelLabel,
+    youtubeVideos: (s.youtubeVideosJson ?? []).map((v) => ({
+      title: v.title,
+      url: v.url,
+      thumbnail: v.thumbnail,
+      description: v.description,
+      enabled: v.enabled,
+    })),
+    newsletterEnabled: s.newsletterEnabled,
+    newsletterEyebrow: s.newsletterEyebrow || CONTENT_DEFAULTS.newsletterEyebrow,
+    newsletterTitle: s.newsletterTitle || CONTENT_DEFAULTS.newsletterTitle,
+    newsletterDescription: s.newsletterDescription || CONTENT_DEFAULTS.newsletterDescription,
+    newsletterButtonText: s.newsletterButtonText || CONTENT_DEFAULTS.newsletterButtonText,
+    newsletterPlaceholder: s.newsletterPlaceholder || CONTENT_DEFAULTS.newsletterPlaceholder,
+    newsletterSuccessMessage: s.newsletterSuccessMessage || CONTENT_DEFAULTS.newsletterSuccessMessage,
+    trustBlockEnabled: s.trustBlockEnabled,
+    trustItems: (s.trustItemsJson ?? []).map((t) => ({
+      title: t.title,
+      description: t.description,
+      enabled: t.enabled,
+    })),
+    footerDescription: s.footerDescription ?? '',
+    footerShowSocials: s.footerShowSocials,
   };
 }
 
@@ -203,6 +257,9 @@ export function apiOrderToInternal(o: ApiOrder): Order {
           ? 'credito'
           : 'boleto',
     },
+    coupon: o.couponCode
+      ? { code: o.couponCode, discount: o.discountValue }
+      : undefined,
     subtotal: o.subtotal,
     total: o.total,
     status: enumAdapters.orderStatusToInternal(o.status),

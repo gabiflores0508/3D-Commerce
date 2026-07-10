@@ -1,8 +1,8 @@
-import type { SiteSettings } from '@prisma/client';
+import { Prisma, type SiteSettings } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { decimalToNumber } from '../../utils/decimal';
 import { safeUnlinkSiteImage, siteImageUrl } from '../../lib/upload';
-import type { UpdateSettingsInput } from './settings.schemas';
+import type { TrustItem, UpdateSettingsInput, YoutubeVideo } from './settings.schemas';
 
 /** Existe UM registro só. id fixo `main`. */
 const SETTINGS_ID = 'main';
@@ -45,8 +45,38 @@ export interface SettingsDTO {
   pixDiscountPercent: number;
   freeShippingThreshold: number;
   shippingNote: string | null;
+  // R17
+  instagramHandle: string | null;
+  youtubeUrl: string | null;
+  youtubeHandle: string | null;
+  facebookUrl: string | null;
+  tiktokUrl: string | null;
+  communityInstagramEnabled: boolean;
+  communityInstagramTitle: string | null;
+  communityInstagramSubtitle: string | null;
+  youtubeSectionEnabled: boolean;
+  youtubeSectionTitle: string | null;
+  youtubeSectionSubtitle: string | null;
+  youtubeChannelUrl: string | null;
+  youtubeChannelLabel: string | null;
+  youtubeVideosJson: YoutubeVideo[];
+  newsletterEnabled: boolean;
+  newsletterEyebrow: string | null;
+  newsletterTitle: string | null;
+  newsletterDescription: string | null;
+  newsletterButtonText: string | null;
+  newsletterPlaceholder: string | null;
+  newsletterSuccessMessage: string | null;
+  trustBlockEnabled: boolean;
+  trustItemsJson: TrustItem[];
+  footerDescription: string | null;
+  footerShowSocials: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+function asArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
 }
 
 function toDTO(s: SiteSettings): SettingsDTO {
@@ -68,6 +98,31 @@ function toDTO(s: SiteSettings): SettingsDTO {
     pixDiscountPercent: decimalToNumber(s.pixDiscountPercent) ?? 0,
     freeShippingThreshold: decimalToNumber(s.freeShippingThreshold) ?? 0,
     shippingNote: s.shippingNote,
+    instagramHandle: s.instagramHandle,
+    youtubeUrl: s.youtubeUrl,
+    youtubeHandle: s.youtubeHandle,
+    facebookUrl: s.facebookUrl,
+    tiktokUrl: s.tiktokUrl,
+    communityInstagramEnabled: s.communityInstagramEnabled,
+    communityInstagramTitle: s.communityInstagramTitle,
+    communityInstagramSubtitle: s.communityInstagramSubtitle,
+    youtubeSectionEnabled: s.youtubeSectionEnabled,
+    youtubeSectionTitle: s.youtubeSectionTitle,
+    youtubeSectionSubtitle: s.youtubeSectionSubtitle,
+    youtubeChannelUrl: s.youtubeChannelUrl,
+    youtubeChannelLabel: s.youtubeChannelLabel,
+    youtubeVideosJson: asArray<YoutubeVideo>(s.youtubeVideosJson),
+    newsletterEnabled: s.newsletterEnabled,
+    newsletterEyebrow: s.newsletterEyebrow,
+    newsletterTitle: s.newsletterTitle,
+    newsletterDescription: s.newsletterDescription,
+    newsletterButtonText: s.newsletterButtonText,
+    newsletterPlaceholder: s.newsletterPlaceholder,
+    newsletterSuccessMessage: s.newsletterSuccessMessage,
+    trustBlockEnabled: s.trustBlockEnabled,
+    trustItemsJson: asArray<TrustItem>(s.trustItemsJson),
+    footerDescription: s.footerDescription,
+    footerShowSocials: s.footerShowSocials,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -95,11 +150,16 @@ export const settingsService = {
 
   async update(input: UpdateSettingsInput): Promise<SettingsDTO> {
     await ensureSettings();
-    const updated = await prisma.siteSettings.update({
-      where: { id: SETTINGS_ID },
-      // `partial()` no schema já deixa cada key opcional; o Prisma ignora undefined.
-      data: input,
-    });
+    // Campos Json precisam de tratamento explícito de null (Prisma.JsonNull).
+    const { youtubeVideosJson, trustItemsJson, ...rest } = input;
+    const data: Prisma.SiteSettingsUpdateInput = { ...rest };
+    if (youtubeVideosJson !== undefined) {
+      data.youtubeVideosJson = youtubeVideosJson === null ? Prisma.JsonNull : youtubeVideosJson;
+    }
+    if (trustItemsJson !== undefined) {
+      data.trustItemsJson = trustItemsJson === null ? Prisma.JsonNull : trustItemsJson;
+    }
+    const updated = await prisma.siteSettings.update({ where: { id: SETTINGS_ID }, data });
     return toDTO(updated);
   },
 

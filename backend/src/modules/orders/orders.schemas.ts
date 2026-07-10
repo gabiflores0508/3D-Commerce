@@ -22,7 +22,17 @@ export const createOrderSchema = z.object({
   customerPhone: z.string().trim().min(8, 'Telefone inválido.'),
   address: orderAddressSchema,
   shippingValue: z.coerce.number().min(0, 'Frete não pode ser negativo.').default(0),
-  discountValue: z.coerce.number().min(0, 'Desconto não pode ser negativo.').default(0),
+  // Cupom (opcional). O DESCONTO é sempre recalculado no backend a partir do
+  // cupom — o cliente não define o valor do desconto.
+  couponCode: z
+    .string()
+    .trim()
+    .max(40)
+    .transform((v) => v.toUpperCase())
+    .optional()
+    .nullable(),
+  // Mantido por compat, porém IGNORADO no serviço (backend é a fonte da verdade).
+  discountValue: z.coerce.number().min(0).optional(),
   paymentMethod: z.nativeEnum(PaymentMethod, {
     errorMap: () => ({ message: 'paymentMethod deve ser PIX, CREDIT_CARD ou BOLETO.' }),
   }),
@@ -58,6 +68,7 @@ export const adminOrdersQuerySchema = z.object({
   status: z.nativeEnum(OrderStatus).optional(),
   paymentStatus: z.nativeEnum(PaymentStatus).optional(),
   paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+  couponCode: z.string().trim().toUpperCase().max(40).optional(),
   search: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

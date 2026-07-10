@@ -7,6 +7,7 @@ import { WhyBuy } from '@/components/home/WhyBuy';
 import { PhysicalStore } from '@/components/home/PhysicalStore';
 import { Testimonials } from '@/components/home/Testimonials';
 import { InstagramFeed } from '@/components/home/InstagramFeed';
+import { YouTubeSection } from '@/components/home/YouTubeSection';
 import { Newsletter } from '@/components/home/Newsletter';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { useSEO } from '@/utils/seo';
@@ -32,6 +33,7 @@ export default function Home() {
       <Testimonials />
       <PhysicalStore />
       <InstagramFeed />
+      <YouTubeSection />
       <Newsletter />
     </>
   );

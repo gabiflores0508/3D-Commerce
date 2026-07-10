@@ -32,6 +32,34 @@ export function whatsappProduct(product: Product, variationLabel?: string): stri
   );
 }
 
+/**
+ * Mensagem de orçamento com detalhes do produto (nome, quantidade, link e
+ * preço quando houver). `productUrl` já deve ser a URL pública absoluta.
+ * A mensagem é URL-encodada por `buildLink`.
+ */
+export function whatsappQuoteProduct(
+  product: Product,
+  qty: number,
+  productUrl: string,
+  variationLabel?: string,
+): string {
+  const v = variationLabel ? ` (${variationLabel})` : '';
+  const priceLine =
+    product.purchaseMode === 'quote'
+      ? ''
+      : `\nValor unitário: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+          product.promoPrice ?? product.price,
+        )}`;
+  const message =
+    `Olá! Tenho interesse neste produto:\n\n` +
+    `Produto: ${product.name}${v}\n` +
+    `Quantidade: ${qty}\n` +
+    `Link: ${productUrl}` +
+    priceLine +
+    `\n\nPode me passar mais informações e orçamento?`;
+  return buildLink(message);
+}
+
 export function whatsappQuote(productNames: string[] = []): string {
   const list = productNames.length
     ? `\n\nProdutos de interesse:\n${productNames.map((n) => `• ${n}`).join('\n')}`

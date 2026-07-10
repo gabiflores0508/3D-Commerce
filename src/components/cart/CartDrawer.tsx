@@ -1,4 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -12,14 +14,30 @@ import { site } from '@/config/site';
 export function CartDrawer() {
   const open = useUIStore((s) => s.cartOpen);
   const setOpen = useUIStore((s) => s.setCartOpen);
-  const { items, updateQty, removeItem, coupon } = useCartStore();
+  const { items, updateQty, removeItem, appliedCoupon, revalidateCoupon, busyItems } = useCartStore();
   const products = useAdminDataStore((s) => s.products);
   const navigate = useNavigate();
 
   const subtotal = getCartSubtotal(items, products);
-  const discount = getCartDiscount(subtotal, coupon);
-  const shipping = getCartShipping(subtotal, coupon);
+  const discount = getCartDiscount(subtotal, appliedCoupon);
+  const shipping = getCartShipping(subtotal, appliedCoupon);
   const total = subtotal - discount + shipping;
+
+  // Revalida o cupom quando o subtotal muda (mesma regra do Cart/Checkout).
+  useEffect(() => {
+    if (appliedCoupon && subtotal > 0) revalidateCoupon(subtotal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  async function changeQty(productId: string, qty: number, itemId?: string) {
+    const res = await updateQty(productId, qty, itemId);
+    if (!res.ok && res.error && res.error !== 'Aguarde…') toast.error(res.error);
+  }
+  async function remove(productId: string, itemId?: string) {
+    const res = await removeItem(productId, itemId);
+    if (res.ok) toast.success('Produto removido do carrinho.');
+    else if (res.error && res.error !== 'Aguarde…') toast.error(res.error);
+  }
 
   return (
     <Drawer open={open} onClose={() => setOpen(false)} title="Seu carrinho">
@@ -48,6 +66,7 @@ export function CartDrawer() {
               const p = products.find((x) => x.id === it.productId);
               if (!p) return null;
               const unitPrice = p.promoPrice ?? p.price;
+              const busy = it.variationId ? busyItems.includes(it.variationId) : false;
               return (
                 <div key={it.productId + (it.variationId ?? '')} className="flex gap-3 p-4">
                   <img src={p.images[0]} alt={p.name} className="h-20 w-20 flex-shrink-0 rounded-lg object-cover" />
@@ -63,18 +82,20 @@ export function CartDrawer() {
                       <span className="text-xs text-ink-mute">{it.variationLabel}</span>
                     )}
                     <div className="mt-auto flex items-end justify-between">
-                      <div className="inline-flex items-center rounded-lg border border-ink-line">
+                      <div className={`inline-flex items-center rounded-lg border border-ink-line ${busy ? 'opacity-50' : ''}`}>
                         <button
-                          className="p-1.5 hover:bg-ink/5"
-                          onClick={() => updateQty(p.id, it.qty - 1, it.variationId)}
+                          className="p-1.5 hover:bg-ink/5 disabled:cursor-not-allowed"
+                          onClick={() => changeQty(p.id, it.qty - 1, it.variationId)}
+                          disabled={busy}
                           aria-label="Diminuir"
                         >
                           <Minus className="h-3 w-3" />
                         </button>
                         <span className="min-w-7 text-center text-xs font-semibold">{it.qty}</span>
                         <button
-                          className="p-1.5 hover:bg-ink/5"
-                          onClick={() => updateQty(p.id, it.qty + 1, it.variationId)}
+                          className="p-1.5 hover:bg-ink/5 disabled:cursor-not-allowed"
+                          onClick={() => changeQty(p.id, it.qty + 1, it.variationId)}
+                          disabled={busy}
                           aria-label="Aumentar"
                         >
                           <Plus className="h-3 w-3" />
@@ -83,8 +104,9 @@ export function CartDrawer() {
                       <div className="text-right">
                         <p className="text-sm font-bold">{formatBRL(unitPrice * it.qty)}</p>
                         <button
-                          onClick={() => removeItem(p.id, it.variationId)}
-                          className="text-[11px] text-ink-mute hover:text-rose-500 inline-flex items-center gap-1"
+                          onClick={() => remove(p.id, it.variationId)}
+                          disabled={busy}
+                          className="text-[11px] text-ink-mute hover:text-rose-500 inline-flex items-center gap-1 disabled:opacity-50"
                         >
                           <Trash2 className="h-3 w-3" /> Remover
                         </button>
@@ -102,10 +124,10 @@ export function CartDrawer() {
                 <dt className="text-ink-mute">Subtotal</dt>
                 <dd>{formatBRL(subtotal)}</dd>
               </div>
-              {discount > 0 && (
+              {appliedCoupon && (discount > 0 || appliedCoupon.freeShipping) && (
                 <div className="flex justify-between text-emerald-600">
-                  <dt>Cupom ({coupon})</dt>
-                  <dd>-{formatBRL(discount)}</dd>
+                  <dt>Cupom ({appliedCoupon.code})</dt>
+                  <dd>{appliedCoupon.freeShipping ? 'Frete grátis' : `-${formatBRL(discount)}`}</dd>
                 </div>
               )}
               <div className="flex justify-between">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -46,7 +46,11 @@ const steps = ['Cliente', 'Endereço', 'Entrega', 'Pagamento', 'Revisão'] as co
 export default function Checkout() {
   useSEO('Checkout');
   const navigate = useNavigate();
-  const { items, coupon, clear } = useCartStore();
+  const {
+    items, appliedCoupon, clear,
+    applyCoupon, removeCoupon, revalidateCoupon, couponLoading, couponError,
+  } = useCartStore();
+  const [couponCode, setCouponCode] = useState('');
   const products = useAdminDataStore((s) => s.products);
   const addOrder = useAdminDataStore((s) => s.addOrder);
   const loggedCustomer = useCurrentCustomer();
@@ -76,11 +80,25 @@ export default function Checkout() {
   const [done, setDone] = useState<string | null>(null);
 
   const subtotal = getCartSubtotal(items, products);
-  const discount = getCartDiscount(subtotal, coupon);
-  const cartShipping = getCartShipping(subtotal, coupon);
+  const discount = getCartDiscount(subtotal, appliedCoupon);
+  const cartShipping = getCartShipping(subtotal, appliedCoupon);
+
+  // Revalida o cupom sempre que o subtotal mudar (remove se inválido).
+  useEffect(() => {
+    if (appliedCoupon && subtotal > 0) revalidateCoupon(subtotal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  async function handleApplyCoupon() {
+    if (!couponCode.trim()) return;
+    const okApplied = await applyCoupon(couponCode, subtotal);
+    if (okApplied) toast.success('Cupom aplicado!');
+    setCouponCode('');
+  }
+  const freeShip = !!appliedCoupon?.freeShipping;
   const shippingPrices: Record<ShippingMethod, { price: number; label: string; deadline: string }> = {
     pac: { price: cartShipping, label: 'PAC', deadline: '5 a 8 dias úteis' },
-    sedex: { price: cartShipping + 18, label: 'Sedex', deadline: '2 a 4 dias úteis' },
+    sedex: { price: freeShip ? 0 : cartShipping + 18, label: 'Sedex', deadline: '2 a 4 dias úteis' },
     retirada: { price: 0, label: 'Retirada na loja', deadline: 'Em até 1 dia útil' },
   };
   const finalShipping = shippingPrices[shipping].price;
@@ -232,7 +250,7 @@ export default function Checkout() {
                       country: 'Brasil',
                     },
                     shippingValue: shippingPrices[shipping].price,
-                    discountValue: discount,
+                    couponCode: appliedCoupon?.code ?? null,
                     paymentMethod: paymentMap[payment],
                     notes: null,
                   });
@@ -273,10 +291,13 @@ export default function Checkout() {
               <dt className="text-ink-mute">Subtotal</dt>
               <dd>{formatBRL(subtotal)}</dd>
             </div>
-            {discount > 0 && (
+            {appliedCoupon && (
               <div className="flex justify-between text-emerald-600">
-                <dt>Cupom</dt>
-                <dd>-{formatBRL(discount)}</dd>
+                <dt>
+                  Cupom {appliedCoupon.code}{' '}
+                  <button onClick={removeCoupon} className="text-xs underline">remover</button>
+                </dt>
+                <dd>{appliedCoupon.freeShipping ? 'Frete grátis' : `-${formatBRL(discount)}`}</dd>
               </div>
             )}
             <div className="flex justify-between">
@@ -288,6 +309,24 @@ export default function Checkout() {
               <dd>{formatBRL(total)}</dd>
             </div>
           </dl>
+
+          {!appliedCoupon && (
+            <div className="mt-4 border-t border-ink-line pt-4">
+              <p className="label">Cupom de desconto</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: BLACK10"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                />
+                <Button variant="secondary" onClick={handleApplyCoupon} loading={couponLoading}>
+                  Aplicar
+                </Button>
+              </div>
+              {couponError && <p className="mt-2 text-[11px] text-rose-500">{couponError}</p>}
+            </div>
+          )}
         </aside>
       </div>
     </div>

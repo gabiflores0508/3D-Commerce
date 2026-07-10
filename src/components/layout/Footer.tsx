@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Logo } from '@/components/ui/Logo';
-import { Instagram, Mail, MapPin, MessageCircle, ShieldCheck, Truck, Wrench } from 'lucide-react';
+import { Instagram, Mail, MapPin, MessageCircle, ShieldCheck, Truck, Wrench, Youtube } from 'lucide-react';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { whatsappContact } from '@/utils/whatsapp';
 import { site } from '@/config/site';
@@ -13,35 +13,51 @@ export function Footer() {
         <div>
           <Logo />
           <p className="mt-4 text-sm leading-relaxed text-ink-mute">
-            Especialistas em impressoras 3D, filamentos, resinas e acessórios. Loja física em Bento Gonçalves e envio para todo o Brasil.
+            {settings.footerDescription ||
+              'Especialistas em impressoras 3D, filamentos, resinas e acessórios. Loja física em Bento Gonçalves e envio para todo o Brasil.'}
           </p>
-          <div className="mt-5 flex items-center gap-3">
-            <a
-              href={settings.instagram}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
-              aria-label="Seguir no Instagram"
-            >
-              <Instagram className="h-4 w-4" />
-            </a>
-            <a
-              href={whatsappContact()}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-emerald-50 hover:text-emerald-600"
-              aria-label="Falar pelo WhatsApp"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </a>
-            <a
-              href={`mailto:${settings.email}`}
-              className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
-              aria-label="Enviar e-mail"
-            >
-              <Mail className="h-4 w-4" />
-            </a>
-          </div>
+          {settings.footerShowSocials && (
+            <div className="mt-5 flex items-center gap-3">
+              {settings.instagram && (
+                <a
+                  href={settings.instagram}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+                  aria-label="Seguir no Instagram"
+                >
+                  <Instagram className="h-4 w-4" />
+                </a>
+              )}
+              {settings.youtubeUrl && (
+                <a
+                  href={settings.youtubeUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-rose-50 hover:text-rose-600"
+                  aria-label="Assistir no YouTube"
+                >
+                  <Youtube className="h-4 w-4" />
+                </a>
+              )}
+              <a
+                href={whatsappContact()}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-emerald-50 hover:text-emerald-600"
+                aria-label="Falar pelo WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+              </a>
+              <a
+                href={`mailto:${settings.email}`}
+                className="rounded-full border border-ink-line p-2 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+                aria-label="Enviar e-mail"
+              >
+                <Mail className="h-4 w-4" />
+              </a>
+            </div>
+          )}
         </div>
 
         <div>

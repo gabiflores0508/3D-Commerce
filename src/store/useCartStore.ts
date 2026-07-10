@@ -1,42 +1,72 @@
 /**
- * Store de carrinho — R9.
+ * Store de carrinho — R9 / R13.
  *
- * Fonte da verdade: backend (`/api/cart`).
- * Este store atua como cache local de UI + wrapper das chamadas de API,
- * preservando a API interna que os componentes existentes usam:
+ * Fonte da verdade dos ITENS: backend (`/api/cart`).
+ * Fonte da verdade do DESCONTO: backend (`/api/coupons/validate` e, na criação
+ * do pedido, `POST /api/orders` revalida o cupom). O frontend só exibe.
+ *
+ * Preserva a API interna usada pelos componentes:
  *   addItem, removeItem, updateQty, clear, applyCoupon, removeCoupon, count.
- *
- * Regras:
- * - Precisa de cliente logado. Se não houver token, mantém carrinho vazio
- *   e sinaliza `requiresAuth` para as UIs redirecionarem/avisarem.
- * - Cupom continua sendo cálculo do frontend (backend não tem entidade Coupon).
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { CartItem, Product } from '@/types';
-import { site, type CouponCode } from '@/config/site';
+import { site } from '@/config/site';
 import { getEffectivePrice } from '@/utils/price';
 import { cartService } from '@/services/cartService';
+import { couponService } from '@/services/couponService';
 import { ApiError, getStoredToken } from '@/services/api';
+import type { ApiCouponDiscountType } from '@/services/types';
+
+/** Resultado de `addItem` — permite ao chamador abrir o drawer só no sucesso. */
+export interface AddItemResult {
+  ok: boolean;
+  requiresAuth?: boolean;
+  error?: string;
+}
+
+/** Cupom aplicado — cache visual; o backend revalida sempre no pedido. */
+export interface AppliedCoupon {
+  code: string;
+  discountType: ApiCouponDiscountType;
+  discountValue: number;
+  discountAmount: number;
+  freeShipping: boolean;
+  message: string;
+}
+
+/** Resultado das operações de item — permite ao componente dar feedback. */
+export interface CartOpResult {
+  ok: boolean;
+  error?: string;
+}
 
 interface CartState {
   items: CartItem[];
-  coupon?: CouponCode;
+  appliedCoupon: AppliedCoupon | null;
+  couponLoading: boolean;
+  couponError: string | null;
   loading: boolean;
-  /** Última mensagem de erro da API (útil para toasts). */
   lastError: string | null;
+  /** IDs de itens com operação em andamento (evita clique duplo / corrida). */
+  busyItems: string[];
 
-  // Fluxo de sincronização
+  // Sincronização
   fetch: () => Promise<void>;
   reset: () => void;
 
-  // API pública (mantida — mesmos nomes de antes)
-  addItem: (productId: string, qty?: number, variationId?: string, variationLabel?: string) => Promise<void>;
-  removeItem: (productId: string, variationId?: string) => Promise<void>;
-  updateQty: (productId: string, qty: number, variationId?: string) => Promise<void>;
+  // Itens
+  addItem: (productId: string, qty?: number, variationId?: string, variationLabel?: string) => Promise<AddItemResult>;
+  removeItem: (productId: string, variationId?: string) => Promise<CartOpResult>;
+  updateQty: (productId: string, qty: number, variationId?: string) => Promise<CartOpResult>;
   clear: () => Promise<void>;
-  applyCoupon: (code: string) => boolean;
+
+  // Cupom (R13)
+  applyCoupon: (code: string, subtotal: number) => Promise<boolean>;
   removeCoupon: () => void;
+  clearCoupon: () => void;
+  revalidateCoupon: (subtotal: number) => Promise<void>;
+
   count: () => number;
 }
 
@@ -48,9 +78,12 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
-      coupon: undefined,
+      appliedCoupon: null,
+      couponLoading: false,
+      couponError: null,
       loading: false,
       lastError: null,
+      busyItems: [],
 
       async fetch() {
         if (!hasCustomerToken()) {
@@ -64,8 +97,6 @@ export const useCartStore = create<CartState>()(
             items: cart.items.map((i) => ({
               productId: i.productId,
               qty: i.quantity,
-              // Guardamos o id do CartItem no `variationId` para reusar as
-              // rotas /cart/items/:id sem quebrar a UI (que só precisa passar o id).
               variationId: i.id,
               variationLabel: undefined,
             })),
@@ -79,13 +110,14 @@ export const useCartStore = create<CartState>()(
       },
 
       reset() {
-        set({ items: [], coupon: undefined, lastError: null });
+        set({ items: [], appliedCoupon: null, couponError: null, lastError: null, busyItems: [] });
       },
 
       async addItem(productId, qty = 1) {
         if (!hasCustomerToken()) {
-          set({ lastError: 'Faça login para adicionar ao carrinho.' });
-          return;
+          const error = 'Faça login para adicionar ao carrinho.';
+          set({ lastError: error });
+          return { ok: false, requiresAuth: true, error };
         }
         try {
           const { cart } = await cartService.addItem(productId, qty);
@@ -98,46 +130,54 @@ export const useCartStore = create<CartState>()(
             })),
             lastError: null,
           });
+          return { ok: true };
         } catch (err) {
           const msg = err instanceof ApiError ? err.message : 'Erro ao adicionar item.';
           set({ lastError: msg });
+          return { ok: false, error: msg };
         }
       },
 
       async removeItem(_productId, variationId) {
-        if (!variationId) return;
+        if (!variationId) return { ok: false, error: 'Item inválido.' };
+        // Guard: ignora se já há operação em andamento neste item.
+        if (get().busyItems.includes(variationId)) return { ok: false, error: 'Aguarde…' };
+        set({ busyItems: [...get().busyItems, variationId] });
         try {
           const { cart } = await cartService.removeItem(variationId);
           set({
-            items: cart.items.map((i) => ({
-              productId: i.productId,
-              qty: i.quantity,
-              variationId: i.id,
-            })),
+            items: cart.items.map((i) => ({ productId: i.productId, qty: i.quantity, variationId: i.id })),
           });
-        } catch {
-          // ignora — carrinho pode ter divergido, refetch pela navegação
+          return { ok: true };
+        } catch (err) {
+          const error = err instanceof ApiError ? err.message : 'Não foi possível atualizar o carrinho.';
+          set({ lastError: error });
+          return { ok: false, error };
+        } finally {
+          set({ busyItems: get().busyItems.filter((id) => id !== variationId) });
         }
       },
 
       async updateQty(_productId, qty, variationId) {
-        if (!variationId) return;
+        if (!variationId) return { ok: false, error: 'Item inválido.' };
         if (qty <= 0) {
-          await get().removeItem(_productId, variationId);
-          return;
+          return get().removeItem(_productId, variationId);
         }
+        // Guard contra clique duplo / respostas fora de ordem.
+        if (get().busyItems.includes(variationId)) return { ok: false, error: 'Aguarde…' };
+        set({ busyItems: [...get().busyItems, variationId] });
         try {
           const { cart } = await cartService.updateItem(variationId, qty);
           set({
-            items: cart.items.map((i) => ({
-              productId: i.productId,
-              qty: i.quantity,
-              variationId: i.id,
-            })),
+            items: cart.items.map((i) => ({ productId: i.productId, qty: i.quantity, variationId: i.id })),
           });
+          return { ok: true };
         } catch (err) {
-          const msg = err instanceof ApiError ? err.message : 'Erro ao atualizar item.';
-          set({ lastError: msg });
+          const error = err instanceof ApiError ? err.message : 'Não foi possível atualizar o carrinho.';
+          set({ lastError: error });
+          return { ok: false, error };
+        } finally {
+          set({ busyItems: get().busyItems.filter((id) => id !== variationId) });
         }
       },
 
@@ -145,21 +185,74 @@ export const useCartStore = create<CartState>()(
         try {
           await cartService.clear();
         } catch {
-          /* segue com limpeza local mesmo se API falhar */
+          /* segue com limpeza local */
         }
-        set({ items: [], coupon: undefined });
+        set({ items: [], appliedCoupon: null, couponError: null, busyItems: [] });
       },
 
-      applyCoupon(code) {
-        const upper = code.trim().toUpperCase() as CouponCode;
-        if (site.coupons[upper]) {
-          set({ coupon: upper });
-          return true;
+      // ------------------------------ Cupom (R13) ---------------------------
+      async applyCoupon(code, subtotal) {
+        const trimmed = code.trim().toUpperCase();
+        if (!trimmed) {
+          set({ couponError: 'Digite um código.' });
+          return false;
         }
-        return false;
+        set({ couponLoading: true, couponError: null });
+        try {
+          const result = await couponService.validate(trimmed, subtotal);
+          if (!result.valid) {
+            set({ couponLoading: false, couponError: result.message, appliedCoupon: null });
+            return false;
+          }
+          set({
+            couponLoading: false,
+            couponError: null,
+            appliedCoupon: {
+              code: result.code,
+              discountType: result.discountType ?? 'PERCENTAGE',
+              discountValue: result.discountValue ?? 0,
+              discountAmount: result.discountAmount,
+              freeShipping: result.freeShipping,
+              message: result.message,
+            },
+          });
+          return true;
+        } catch (err) {
+          const msg = err instanceof ApiError ? err.message : 'Não foi possível aplicar o cupom.';
+          set({ couponLoading: false, couponError: msg, appliedCoupon: null });
+          return false;
+        }
       },
+
       removeCoupon() {
-        set({ coupon: undefined });
+        set({ appliedCoupon: null, couponError: null });
+      },
+      clearCoupon() {
+        set({ appliedCoupon: null, couponError: null });
+      },
+
+      /** Revalida o cupom contra o subtotal atual; remove se ficou inválido. */
+      async revalidateCoupon(subtotal) {
+        const current = get().appliedCoupon;
+        if (!current) return;
+        try {
+          const result = await couponService.validate(current.code, subtotal);
+          if (!result.valid) {
+            set({ appliedCoupon: null, couponError: result.message });
+            return;
+          }
+          set({
+            appliedCoupon: {
+              ...current,
+              discountAmount: result.discountAmount,
+              freeShipping: result.freeShipping,
+              message: result.message,
+            },
+            couponError: null,
+          });
+        } catch {
+          // Falha de rede: mantém o cupom; o backend revalida no pedido.
+        }
       },
 
       count() {
@@ -168,8 +261,8 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: '3dc-cart',
-      // Só persistimos o cupom — os itens vêm sempre da API na próxima visita.
-      partialize: (s) => ({ coupon: s.coupon }),
+      // Persistimos só o cupom aplicado (cache visual). Itens vêm da API.
+      partialize: (s) => ({ appliedCoupon: s.appliedCoupon }),
     },
   ),
 );
@@ -186,15 +279,17 @@ export function getCartSubtotal(items: CartItem[], products: Product[]): number 
   }, 0);
 }
 
-export function getCartDiscount(subtotal: number, code?: CouponCode): number {
-  if (!code) return 0;
-  const c = site.coupons[code];
-  if (c.type === 'percent') return Number(((subtotal * c.value) / 100).toFixed(2));
-  return 0;
+/** Desconto em R$ para exibição. `discountAmount` vem revalidado do backend. */
+export function getCartDiscount(subtotal: number, coupon?: AppliedCoupon | null): number {
+  if (!coupon) return 0;
+  if (coupon.freeShipping) return 0; // frete grátis não desconta no subtotal
+  // Clampa ao subtotal para nunca exibir total negativo.
+  return Number(Math.min(coupon.discountAmount, subtotal).toFixed(2));
 }
 
-export function getCartShipping(subtotal: number, code?: CouponCode): number {
-  if (code && site.coupons[code].type === 'shipping') return 0;
+/** Frete: grátis por cupom FREE_SHIPPING ou por atingir o limite da loja. */
+export function getCartShipping(subtotal: number, coupon?: AppliedCoupon | null): number {
+  if (coupon?.freeShipping) return 0;
   if (subtotal >= site.freeShippingThreshold) return 0;
   return 24.9;
 }

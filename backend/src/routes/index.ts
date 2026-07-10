@@ -10,6 +10,8 @@ import { quotesRouter } from '../modules/quotes/quotes.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
 import { bannersRouter } from '../modules/banners/banners.routes';
 import { testimonialsRouter } from '../modules/testimonials/testimonials.routes';
+import { couponsRouter } from '../modules/coupons/coupons.routes';
+import { scriptsRouter } from '../modules/scripts/scripts.routes';
 import { dashboardRouter } from '../modules/dashboard/dashboard.routes';
 
 /**
@@ -32,4 +34,6 @@ apiRouter.use('/api', quotesRouter);
 apiRouter.use('/api', settingsRouter);
 apiRouter.use('/api', bannersRouter);
 apiRouter.use('/api', testimonialsRouter);
+apiRouter.use('/api', couponsRouter);
+apiRouter.use('/api', scriptsRouter);
 apiRouter.use('/api', dashboardRouter);

@@ -7,7 +7,8 @@ export interface CreateOrderPayload {
   customerPhone: string;
   address: ApiOrderAddress;
   shippingValue?: number;
-  discountValue?: number;
+  /** Código do cupom. O desconto é recalculado no backend. */
+  couponCode?: string | null;
   paymentMethod: ApiPaymentMethod;
   notes?: string | null;
 }

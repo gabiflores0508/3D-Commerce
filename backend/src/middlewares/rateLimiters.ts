@@ -37,3 +37,12 @@ export const uploadRateLimiter = rateLimit({
   legacyHeaders: false,
   handler,
 });
+
+/** Validação pública de cupom — 30 tentativas / 10 min por IP (evita brute force de códigos). */
+export const couponValidateRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler,
+});

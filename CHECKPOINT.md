@@ -1,10 +1,102 @@
 # CHECKPOINT — 3DCommerce
 
-Data do checkpoint: **2026-07-01 (pós-R10)**
-Última rodada concluída: **R10 — Segurança, Auditoria Final e Deploy Prep**
-Próxima rodada sugerida: **R11 — Gateway de pagamento e integrações externas (fase 2)**
+Data do checkpoint: **2026-07-07 (pós-R18)**
+Última rodada concluída: **R18 — Revisão de perfil, carrinho, CartDrawer e checkout**
+Próxima rodada sugerida: **R19 — Gateway de pagamento / storage externo (produção real)**
 
-> Deploy real **não foi executado** nesta rodada (fora do escopo por instrução explícita). Este checkpoint documenta o estado após hardening de segurança e auditoria.
+> Deploy real **não foi executado** (aguarda autorização). As seções abaixo cobrem até a R9B; as seções **"Atualização R10–R14"** e **"Atualização R15–R18"** a seguir são o registro mais recente e prevalecem em divergências.
+
+---
+
+## Atualização R18 (2026-07-07)
+
+### R18 — Perfil, carrinho, CartDrawer e checkout ✅
+- **Dropdown "Minha conta"** (`Header.tsx`): não some mais ao mover o mouse até o menu — timer de fechamento de 180ms (mesmo padrão do MegaMenu) + click como ação principal + `click-outside` + ESC + `aria-expanded/haspopup`. Mobile abre/fecha por toque; logout preservado.
+- **Store do carrinho** (`useCartStore`): `updateQty`/`removeItem` agora retornam `{ok,error}` e usam guarda `busyItems` (por item) para evitar clique duplo / respostas fora de ordem; `reset`/`clear` limpam `busyItems`.
+- **CartDrawer e /carrinho**: botões +/−/remover ficam desabilitados enquanto o item está em operação; toast "Produto removido"/erro amigável; cupom revalidado ao mudar o subtotal (inclusive no drawer). Sem item fantasma; empty state correto ao esvaziar.
+- **Checkout**: mantém aviso claro quando o carrinho está vazio; pedido continua recalculado no backend; carrinho/cupom limpos após o pedido.
+- **Causa raiz** dos bugs: dropdown fechava por `onMouseLeave` imediato + gap de 4px; carrinho sem guard permitia cliques simultâneos gerarem estado inconsistente.
+
+---
+
+## Atualização R15–R17 (2026-07-07)
+
+### R15 — Página pública de produto ✅
+Breadcrumb com categoria, economia em R$, "Poucas unidades"/"Produto indisponível", quantidade, orçamento WhatsApp enriquecido (`whatsappQuoteProduct`, URL-encodado), bloco de confiança, descrição/relacionados condicionais, placeholder de imagem, **JSON-LD Product** (`useJsonLd`), mobile.
+
+### R16 — Carrinho, Excel e YouTube ✅
+- **Carrinho corrigido**: `addItem` retorna `{ok, requiresAuth, error}`; o drawer abre **só no sucesso**; visitante → toast + `/login`; sem toast/drawer falso.
+- **Excel** (SheetJS): exportar produtos `.xlsx`, baixar modelo, importar com preview/validação (nome/preço/estoque/booleanos), grava via `productService` (cria/atualiza por slug). Arquivos: `utils/productExcel.ts`, `components/admin/ProductImportModal.tsx`.
+- **YouTube** no footer + seção na comunidade; espaço vazio antes da newsletter reduzido.
+
+### R17 — Conteúdos editáveis pelo admin ✅
+- **SiteSettings expandido** (migration `20260707011417_settings_editable_content`): redes sociais (`instagramHandle`, `youtubeUrl/Handle`, `facebookUrl`, `tiktokUrl`), comunidade Instagram (enabled/título/subtítulo), YouTube (enabled/título/subtítulo/channelUrl/label/`youtubeVideosJson`), newsletter (enabled + 6 textos), blocos de confiança (`trustBlockEnabled`, `trustItemsJson`), footer (descrição, `footerShowSocials`).
+- **Validação** (Zod): URLs só http/https (bloqueia `javascript:`/`data:`), vídeos ≤6, trust ≤8, limites de texto.
+- **Admin Configurações** ganhou seções: Redes sociais, Seção Instagram, Seção YouTube (+ vídeos add/remove), Newsletter, Blocos de confiança. Editor re-sincroniza quando as settings carregam; validação visual de URL; toast de erro do backend.
+- **Público** passou a ler settings: Footer (ícones condicionais), InstagramFeed, YouTubeSection, Newsletter (ocultam sem buraco quando desativados), Product (bloco de confiança editável com fallback).
+- **Legados removidos**: `site.youtube` e `src/data/storeSettings.ts` (morto). Fallbacks centralizados em `CONTENT_DEFAULTS` (adapters) e `DEFAULT_SETTINGS` (store).
+- **Overflow horizontal** corrigido: `overflow-x-clip` no wrapper do `PublicLayout` (blob decorativo do Hero já tinha `overflow-hidden`).
+
+### Como editar no admin (`/admin/configuracoes`)
+- **Redes sociais**: handles + URL do YouTube (vira ícone no rodapé) + "mostrar ícones sociais".
+- **YouTube**: ativar/desativar, título/subtítulo, canal, e até 6 vídeos (home mostra 3 ativos) com add/remover.
+- **Newsletter**: ativar/desativar + eyebrow/título/descrição/placeholder/botão/sucesso.
+- **Blocos de confiança**: ativar/desativar + itens (título/descrição). Salvar em "Salvar conteúdos do site".
+
+### Migrations novas (R15–R17)
+`20260707011417_settings_editable_content` (as de cupom/pedido são das R12–R13).
+
+### Pendências futuras
+- Editar Instagram do footer também via campo dedicado (hoje usa `instagram` URL geral).
+- Gateway de pagamento + storage externo de uploads (produção real).
+- Importação Excel em lote via endpoint backend (hoje 1 request por linha).
+
+---
+
+## Atualização R10–R14 (2026-07-06)
+
+### R10 — Segurança e hardening ✅
+Helmet, `express-rate-limit` (auth/quotes/uploads), CORS via `CORS_ORIGIN` (CSV), validação de `JWT_SECRET` (≥16, sem `change-me`), auditoria de uploads/`passwordHash`/erros. Ver `STAGING-R11.md` e `DEPLOY.md`.
+
+### R11 — Deploy staging prep ✅
+`vercel.json` (SPA fallback) + `STAGING-R11.md` (checklists Render/Railway/Vercel/Neon + pós-deploy + roteiro demo). Credencial Neon rotacionada. **Deploy real não executado.**
+
+### R12 — Cupons + Scripts WhatsApp (admin) ✅
+Sidebar agrupada (GERAL/CATÁLOGO/VENDAS/CONTEÚDO/SISTEMA), item "Novo produto" removido. Models `Coupon` e `CouponScript` + enums `CouponDiscountType`/`ScriptCategory`. CRUD admin de cupons e scripts, preview e cópia de mensagem de WhatsApp.
+
+### R13 — Cupom no carrinho/checkout/pedidos ✅
+Cupom real no carrinho e checkout; validação pública; **desconto recalculado 100% no backend** (cliente não define desconto); Order guarda snapshot `couponId/couponCode/couponDiscountType`; `usageCount` incrementa **atômico e só na criação do pedido**; admin exibe cupom no pedido.
+
+### R14 — Limpeza + limite por cliente + métricas ✅
+- Legados removidos: `site.coupons` e `site.admin.password` (login usa JWT real; cupons vivem só no banco).
+- **`usageLimitPerCustomer`** aplicado por `userId` (exclui pedidos `CANCELED`), na validação (se autenticado) e **obrigatoriamente na criação do pedido**. Reason `CUSTOMER_LIMIT_REACHED`.
+- **Métricas por cupom** (`ordersCount`, `revenue`, `discountGiven`, `lastUsedAt`) no admin, via 1 aggregate. Cards mostram Pedidos/Receita/Desconto + Limite/cliente.
+- **Pedidos por cupom**: filtro `couponCode` no `GET /api/admin/orders` + botão "Ver pedidos" (`/admin/pedidos?cupom=CODE`) e "Ver scripts" (`/admin/scripts?couponId=ID`).
+- **Cupons → Scripts**: "Criar script com este cupom" prefila template por tipo (PERCENTAGE/FIXED_AMOUNT/FREE_SHIPPING) + linhas de validade/valor mínimo.
+
+### Rotas de cupons
+- `POST /api/coupons/validate` — público, auth opcional (rate-limited); não expõe dados internos.
+- `GET /api/admin/coupons` (com métricas) · `GET /api/admin/coupons/:id` · `POST` · `PUT /:id` · `PATCH /:id/toggle` · `DELETE /:id` — admin.
+
+### Rotas de scripts
+- `GET /api/admin/scripts` (filtros `category`/`couponId`/`search`) · `GET /:id` · `POST` · `PUT /:id` · `PATCH /:id/toggle` · `DELETE /:id` — admin.
+
+### Regras de negócio dos cupons
+Status derivado no backend (ACTIVE/INACTIVE/EXPIRED/EXHAUSTED/SCHEDULED). Desconto: percentual (≤100, com teto opcional), valor fixo, frete grátis. `code` único, uppercase, `[A-Z0-9_-]`. `minOrderValue`, `startsAt`/`expiresAt`, `usageLimit` (global, atômico), `usageLimitPerCustomer`. Total nunca negativo. Sem pagamento real, o cupom é **consumido na criação do pedido**.
+
+### Como testar cupom no checkout
+Logar como cliente → adicionar produto → `/carrinho` ou `/checkout` → "Cupom de desconto" → aplicar `BLACK10` (10%), `PRIMEIRACOMPRA` (R$20, mín. R$150), `FRETEGRATIS` → ver/remover → finalizar. Admin: `/admin/pedidos` (coluna Cupom) e `/admin/cupons` (métricas).
+
+### Como testar scripts WhatsApp
+`/admin/scripts` → novo script, selecionar cupom → template prefila por tipo → preview estilo WhatsApp com variáveis → "Copiar mensagem"/"Copiar com cupom".
+
+### Migrations novas
+`20260706181214_coupons_and_scripts`, `20260706193037_order_coupon`.
+
+### Pendências futuras
+- `usageLimitPerCustomer`: janela teórica de corrida sob concorrência simultânea do mesmo cliente (o `usageLimit` global é atômico).
+- Gateway de pagamento → mover consumo do cupom para confirmação de pagamento.
+- Storage externo de uploads (disco efêmero em serverless).
 
 ---
 

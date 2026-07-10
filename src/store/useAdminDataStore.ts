@@ -19,6 +19,7 @@ import { categoryService } from '@/services/categoryService';
 import { bannerService } from '@/services/bannerService';
 import { orderService } from '@/services/orderService';
 import { settingsService } from '@/services/settingsService';
+import { ApiError } from '@/services/api';
 import {
   apiBannerToInternal,
   apiCategoryToInternal,
@@ -40,6 +41,32 @@ const DEFAULT_SETTINGS: StoreSettings = {
   shippingNote: 'Enviamos para todo o Brasil',
   freeShippingThreshold: 299,
   pixDiscountPercent: 5,
+  // R17 — conteúdos editáveis (fallbacks até a API carregar)
+  instagramHandle: '',
+  youtubeUrl: '',
+  youtubeHandle: '',
+  facebookUrl: '',
+  tiktokUrl: '',
+  communityInstagramEnabled: true,
+  communityInstagramTitle: 'Acompanhe no Instagram',
+  communityInstagramSubtitle: '',
+  youtubeSectionEnabled: true,
+  youtubeSectionTitle: 'Assista no YouTube',
+  youtubeSectionSubtitle: 'Veja dicas, novidades e projetos em impressão 3D.',
+  youtubeChannelUrl: '',
+  youtubeChannelLabel: 'Ver canal',
+  youtubeVideos: [],
+  newsletterEnabled: true,
+  newsletterEyebrow: 'Novidades',
+  newsletterTitle: 'Receba ofertas e novidades da 3DCommerce',
+  newsletterDescription: 'Cupons, novos filamentos e impressoras em primeira mão.',
+  newsletterButtonText: 'Inscrever',
+  newsletterPlaceholder: 'Seu e-mail',
+  newsletterSuccessMessage: 'Inscrição realizada! Obrigado.',
+  trustBlockEnabled: true,
+  trustItems: [],
+  footerDescription: '',
+  footerShowSocials: true,
 };
 
 interface AdminDataState {
@@ -75,7 +102,7 @@ interface AdminDataState {
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
 
   // Settings
-  updateSettings: (patch: Partial<StoreSettings>) => Promise<void>;
+  updateSettings: (patch: Partial<StoreSettings>) => Promise<{ ok: boolean; error?: string }>;
 
   resetAll: () => Promise<void>;
 }
@@ -335,11 +362,40 @@ export const useAdminDataStore = create<AdminDataState>((set, get) => ({
     if (patch.pixDiscountPercent !== undefined) payload.pixDiscountPercent = patch.pixDiscountPercent;
     if (patch.logo !== undefined) payload.logoUrl = patch.logo || null;
 
+    // --- R17: conteúdos editáveis ---
+    if (patch.instagramHandle !== undefined) payload.instagramHandle = patch.instagramHandle || null;
+    if (patch.youtubeUrl !== undefined) payload.youtubeUrl = patch.youtubeUrl || null;
+    if (patch.youtubeHandle !== undefined) payload.youtubeHandle = patch.youtubeHandle || null;
+    if (patch.facebookUrl !== undefined) payload.facebookUrl = patch.facebookUrl || null;
+    if (patch.tiktokUrl !== undefined) payload.tiktokUrl = patch.tiktokUrl || null;
+    if (patch.communityInstagramEnabled !== undefined) payload.communityInstagramEnabled = patch.communityInstagramEnabled;
+    if (patch.communityInstagramTitle !== undefined) payload.communityInstagramTitle = patch.communityInstagramTitle || null;
+    if (patch.communityInstagramSubtitle !== undefined) payload.communityInstagramSubtitle = patch.communityInstagramSubtitle || null;
+    if (patch.youtubeSectionEnabled !== undefined) payload.youtubeSectionEnabled = patch.youtubeSectionEnabled;
+    if (patch.youtubeSectionTitle !== undefined) payload.youtubeSectionTitle = patch.youtubeSectionTitle || null;
+    if (patch.youtubeSectionSubtitle !== undefined) payload.youtubeSectionSubtitle = patch.youtubeSectionSubtitle || null;
+    if (patch.youtubeChannelUrl !== undefined) payload.youtubeChannelUrl = patch.youtubeChannelUrl || null;
+    if (patch.youtubeChannelLabel !== undefined) payload.youtubeChannelLabel = patch.youtubeChannelLabel || null;
+    if (patch.youtubeVideos !== undefined) payload.youtubeVideosJson = patch.youtubeVideos;
+    if (patch.newsletterEnabled !== undefined) payload.newsletterEnabled = patch.newsletterEnabled;
+    if (patch.newsletterEyebrow !== undefined) payload.newsletterEyebrow = patch.newsletterEyebrow || null;
+    if (patch.newsletterTitle !== undefined) payload.newsletterTitle = patch.newsletterTitle || null;
+    if (patch.newsletterDescription !== undefined) payload.newsletterDescription = patch.newsletterDescription || null;
+    if (patch.newsletterButtonText !== undefined) payload.newsletterButtonText = patch.newsletterButtonText || null;
+    if (patch.newsletterPlaceholder !== undefined) payload.newsletterPlaceholder = patch.newsletterPlaceholder || null;
+    if (patch.newsletterSuccessMessage !== undefined) payload.newsletterSuccessMessage = patch.newsletterSuccessMessage || null;
+    if (patch.trustBlockEnabled !== undefined) payload.trustBlockEnabled = patch.trustBlockEnabled;
+    if (patch.trustItems !== undefined) payload.trustItemsJson = patch.trustItems;
+    if (patch.footerDescription !== undefined) payload.footerDescription = patch.footerDescription || null;
+    if (patch.footerShowSocials !== undefined) payload.footerShowSocials = patch.footerShowSocials;
+
     try {
       const { settings } = await settingsService.update(payload);
       set({ settings: apiSettingsToInternal(settings) });
-    } catch {
-      // ignora
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof ApiError ? err.message : 'Erro ao salvar configurações.';
+      return { ok: false, error };
     }
   },
 

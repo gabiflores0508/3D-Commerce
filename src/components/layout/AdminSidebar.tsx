@@ -1,19 +1,69 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Tags, Sparkles, Image, ShoppingCart, Settings, LogOut, Plus, FileText, MessageSquareQuote } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Package,
+  Tags,
+  Sparkles,
+  Image,
+  ShoppingCart,
+  Settings,
+  LogOut,
+  FileText,
+  MessageSquareQuote,
+  Ticket,
+  MessageCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAdminAuthStore } from '@/store/useAdminAuthStore';
 import { Logo } from '@/components/ui/Logo';
 
-const items = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/produtos', label: 'Produtos', icon: Package },
-  { to: '/admin/produtos/novo', label: 'Novo produto', icon: Plus },
-  { to: '/admin/categorias', label: 'Categorias', icon: Tags },
-  { to: '/admin/categoria-sazonal', label: 'Categoria Sazonal', icon: Sparkles },
-  { to: '/admin/banners', label: 'Banners', icon: Image },
-  { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
-  { to: '/admin/orcamentos', label: 'Orçamentos', icon: FileText },
-  { to: '/admin/depoimentos', label: 'Depoimentos', icon: MessageSquareQuote },
-  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+// Menu lateral agrupado por seções (R12).
+// "Novo produto" removido — a criação continua acessível dentro de Produtos.
+const groups: NavGroup[] = [
+  {
+    title: 'Geral',
+    items: [{ to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+  },
+  {
+    title: 'Catálogo',
+    items: [
+      { to: '/admin/produtos', label: 'Produtos', icon: Package },
+      { to: '/admin/categorias', label: 'Categorias', icon: Tags },
+      { to: '/admin/categoria-sazonal', label: 'Categoria Sazonal', icon: Sparkles },
+      { to: '/admin/banners', label: 'Banners', icon: Image },
+    ],
+  },
+  {
+    title: 'Vendas',
+    items: [
+      { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
+      { to: '/admin/orcamentos', label: 'Orçamentos', icon: FileText },
+      { to: '/admin/cupons', label: 'Cupons', icon: Ticket },
+    ],
+  },
+  {
+    title: 'Conteúdo',
+    items: [
+      { to: '/admin/depoimentos', label: 'Depoimentos', icon: MessageSquareQuote },
+      { to: '/admin/scripts', label: 'Scripts', icon: MessageCircle },
+    ],
+  },
+  {
+    title: 'Sistema',
+    items: [{ to: '/admin/configuracoes', label: 'Configurações', icon: Settings }],
+  },
 ];
 
 interface Props {
@@ -38,22 +88,31 @@ export function AdminSidebar({ onNavigate, variant = 'desktop' }: Props) {
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-ink-mute">Admin</p>
         </div>
       )}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-        {items.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.end}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                isActive ? 'bg-ink text-bg' : 'text-ink-soft hover:bg-ink/5 hover:text-ink'
-              }`
-            }
-          >
-            <it.icon className="h-4 w-4" />
-            {it.label}
-          </NavLink>
+      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+              {group.title}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((it) => (
+                <NavLink
+                  key={it.to}
+                  to={it.to}
+                  end={it.end}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      isActive ? 'bg-ink text-bg' : 'text-ink-soft hover:bg-ink/5 hover:text-ink'
+                    }`
+                  }
+                >
+                  <it.icon className="h-4 w-4" />
+                  {it.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       <button

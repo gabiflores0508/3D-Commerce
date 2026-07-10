@@ -4,6 +4,7 @@ import {
   PaymentStatus,
   Prisma,
   ProductPurchaseMode,
+  type CouponDiscountType,
   type Order,
   type OrderItem,
   type User,
@@ -11,6 +12,7 @@ import {
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../utils/httpError';
 import { decimalToNumber } from '../../utils/decimal';
+import { couponsService } from '../coupons/coupons.service';
 import type {
   AdminOrdersQuery,
   CreateOrderInput,
@@ -34,7 +36,12 @@ export interface OrderDTO {
   subtotal: number;
   shippingValue: number;
   discountValue: number;
+  /** subtotal + frete, antes do desconto do cupom. */
+  totalBeforeDiscount: number;
   total: number;
+  couponId: string | null;
+  couponCode: string | null;
+  couponDiscountType: CouponDiscountType | null;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
@@ -64,7 +71,12 @@ function toOrderDTO(order: OrderWithRelations): OrderDTO {
     subtotal: decimalToNumber(order.subtotal) ?? 0,
     shippingValue: decimalToNumber(order.shippingValue) ?? 0,
     discountValue: decimalToNumber(order.discountValue) ?? 0,
+    totalBeforeDiscount:
+      (decimalToNumber(order.subtotal) ?? 0) + (decimalToNumber(order.shippingValue) ?? 0),
     total: decimalToNumber(order.total) ?? 0,
+    couponId: order.couponId,
+    couponCode: order.couponCode,
+    couponDiscountType: order.couponDiscountType,
     status: order.status,
     paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
@@ -134,16 +146,40 @@ export const ordersService = {
       const line = new Prisma.Decimal(i.unitPrice).mul(i.quantity);
       return acc.add(line);
     }, new Prisma.Decimal(0));
+    const subtotalNum = decimalToNumber(subtotal) ?? 0;
 
-    const shipping = new Prisma.Decimal(input.shippingValue);
-    const discount = new Prisma.Decimal(input.discountValue);
-    const total = subtotal.add(shipping).sub(discount);
+    // Cupom: SEMPRE revalidado no backend. O `input.discountValue` do cliente
+    // é ignorado — o desconto vem exclusivamente do cupom resolvido aqui.
+    const resolved = input.couponCode
+      ? await couponsService.resolveForOrder(input.couponCode, subtotalNum, userId)
+      : null;
 
-    if (total.lt(0)) {
-      throw HttpError.badRequest('Total não pode ficar negativo.');
-    }
+    const freeShipping = resolved?.freeShipping ?? false;
+    const shipping = new Prisma.Decimal(freeShipping ? 0 : input.shippingValue);
+    const discount = new Prisma.Decimal(resolved ? resolved.discountAmount : 0);
+    let total = subtotal.add(shipping).sub(discount);
+    if (total.lt(0)) total = new Prisma.Decimal(0); // nunca negativo
 
     const order = await prisma.$transaction(async (tx) => {
+      // Consome o cupom de forma ATÔMICA antes de criar o pedido.
+      // updateMany com guarda de limite evita corrida em cupons como VIP5:
+      // se dois pedidos simultâneos disputam o último uso, só um passa.
+      if (resolved) {
+        const c = resolved.coupon;
+        if (c.usageLimit != null) {
+          const upd = await tx.coupon.updateMany({
+            where: { id: c.id, usageCount: { lt: c.usageLimit } },
+            data: { usageCount: { increment: 1 } },
+          });
+          if (upd.count === 0) throw HttpError.conflict('Cupom esgotado.');
+        } else {
+          await tx.coupon.update({
+            where: { id: c.id },
+            data: { usageCount: { increment: 1 } },
+          });
+        }
+      }
+
       const created = await tx.order.create({
         data: {
           userId,
@@ -159,6 +195,10 @@ export const ordersService = {
           paymentMethod: input.paymentMethod,
           paymentStatus: PaymentStatus.PENDING,
           notes: input.notes ?? null,
+          // Snapshot do cupom aplicado (preserva histórico).
+          couponId: resolved?.coupon.id ?? null,
+          couponCode: resolved?.coupon.code ?? null,
+          couponDiscountType: resolved?.coupon.discountType ?? null,
           items: {
             create: cart.items.map((item) => {
               const line = new Prisma.Decimal(item.unitPrice).mul(item.quantity);
@@ -235,6 +275,7 @@ export const ordersService = {
     if (query.status) where.status = query.status;
     if (query.paymentStatus) where.paymentStatus = query.paymentStatus;
     if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
+    if (query.couponCode) where.couponCode = query.couponCode;
 
     if (query.search) {
       where.OR = [

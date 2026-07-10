@@ -6,7 +6,7 @@
  *
  *   npm run prisma:seed
  */
-import { PrismaClient, ProductPurchaseMode, UserRole } from '@prisma/client';
+import { PrismaClient, ProductPurchaseMode, UserRole, CouponDiscountType, ScriptCategory } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -368,6 +368,133 @@ async function main() {
     });
   }
   console.log(`[seed] testimonials: ${testimonialsData.length}`);
+
+  // -----------------------------------------------------------------------
+  // 7. Cupons de exemplo (R12) — idempotente por code.
+  // -----------------------------------------------------------------------
+  const now = new Date();
+  const in30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const couponsData = [
+    {
+      code: 'BLACK10',
+      name: 'Black Friday 10% OFF',
+      description: 'Desconto de 10% em toda a loja.',
+      discountType: CouponDiscountType.PERCENTAGE,
+      discountValue: 10,
+      expiresAt: in30days,
+      isActive: true,
+    },
+    {
+      code: 'PRIMEIRACOMPRA',
+      name: 'Primeira Compra R$ 20 OFF',
+      description: 'R$ 20 de desconto em pedidos acima de R$ 150.',
+      discountType: CouponDiscountType.FIXED_AMOUNT,
+      discountValue: 20,
+      minOrderValue: 150,
+      isActive: true,
+    },
+    {
+      code: 'FRETEGRATIS',
+      name: 'Frete Grátis',
+      description: 'Frete grátis em qualquer pedido.',
+      discountType: CouponDiscountType.FREE_SHIPPING,
+      discountValue: 0,
+      isActive: true,
+    },
+    {
+      code: 'NATAL3D',
+      name: 'Natal 3D 15% OFF',
+      description: 'Cupom sazonal de Natal.',
+      discountType: CouponDiscountType.PERCENTAGE,
+      discountValue: 15,
+      isSeasonal: true,
+      seasonalName: 'Natal',
+      isActive: true,
+    },
+    {
+      code: 'VIP5',
+      name: 'VIP 5 usos',
+      description: 'Válido apenas para os 5 primeiros usos.',
+      discountType: CouponDiscountType.PERCENTAGE,
+      discountValue: 12,
+      usageLimit: 5,
+      isActive: true,
+    },
+  ] as const;
+
+  const couponsByCode: Record<string, string> = {};
+  for (const c of couponsData) {
+    const saved = await prisma.coupon.upsert({
+      where: { code: c.code },
+      create: {
+        code: c.code,
+        name: c.name,
+        description: c.description,
+        discountType: c.discountType,
+        discountValue: c.discountValue,
+        minOrderValue: 'minOrderValue' in c ? c.minOrderValue : null,
+        expiresAt: 'expiresAt' in c ? c.expiresAt : null,
+        usageLimit: 'usageLimit' in c ? c.usageLimit : null,
+        isSeasonal: 'isSeasonal' in c ? c.isSeasonal : false,
+        seasonalName: 'seasonalName' in c ? c.seasonalName : null,
+        isActive: c.isActive,
+      },
+      update: { name: c.name, description: c.description },
+    });
+    couponsByCode[c.code] = saved.id;
+  }
+  console.log(`[seed] cupons: ${couponsData.length}`);
+
+  // -----------------------------------------------------------------------
+  // 8. Scripts de WhatsApp de exemplo (R12) — idempotente por id fixo.
+  // -----------------------------------------------------------------------
+  const scriptsData = [
+    {
+      id: 'script-cupom-boasvindas',
+      title: 'Oferta com cupom',
+      description: 'Envie um cupom de desconto para o cliente.',
+      category: ScriptCategory.COUPON,
+      linkedCouponCode: 'BLACK10',
+      messageTemplate:
+        'Olá, {{nome_cliente}}! Tudo bem? 😊\n\nTemos uma condição especial para você na {{nome_loja}}:\n\nUse o cupom *{{cupom}}* e ganhe {{desconto}} na sua compra.\nVálido até {{validade}}.\n\nAcesse: {{link_loja}}\n\nQualquer dúvida, me chama por aqui!',
+    },
+    {
+      id: 'script-pos-venda',
+      title: 'Pós-venda / agradecimento',
+      description: 'Mensagem de agradecimento após a compra.',
+      category: ScriptCategory.POST_SALE,
+      linkedCouponCode: null,
+      messageTemplate:
+        'Oi, {{nome_cliente}}! Aqui é da {{nome_loja}}. 🙌\n\nObrigado pela sua compra! Qualquer dúvida sobre o seu pedido, é só me chamar por aqui.',
+    },
+    {
+      id: 'script-recuperacao-orcamento',
+      title: 'Recuperação de orçamento',
+      description: 'Retomar contato com quem pediu orçamento.',
+      category: ScriptCategory.QUOTE_RECOVERY,
+      linkedCouponCode: 'PRIMEIRACOMPRA',
+      messageTemplate:
+        'Olá, {{nome_cliente}}! Vi que você pediu um orçamento na {{nome_loja}}.\n\nAinda dá tempo de fechar com condição especial: use o cupom *{{cupom}}* e ganhe {{desconto}}.\n\nMe chama para finalizar! {{link_loja}}',
+    },
+  ] as const;
+
+  for (const s of scriptsData) {
+    const linkedCouponId = s.linkedCouponCode ? couponsByCode[s.linkedCouponCode] ?? null : null;
+    await prisma.couponScript.upsert({
+      where: { id: s.id },
+      create: {
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        category: s.category,
+        messageTemplate: s.messageTemplate,
+        linkedCouponId,
+        isActive: true,
+      },
+      update: { title: s.title, messageTemplate: s.messageTemplate, linkedCouponId },
+    });
+  }
+  console.log(`[seed] scripts: ${scriptsData.length}`);
 
   console.log('[seed] finalizado com sucesso.');
 }

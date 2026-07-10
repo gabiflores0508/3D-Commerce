@@ -147,7 +147,11 @@ export interface ApiOrder {
   subtotal: number;
   shippingValue: number;
   discountValue: number;
+  totalBeforeDiscount: number;
   total: number;
+  couponId: string | null;
+  couponCode: string | null;
+  couponDiscountType: ApiCouponDiscountType | null;
   status: ApiOrderStatus;
   paymentMethod: ApiPaymentMethod;
   paymentStatus: ApiPaymentStatus;
@@ -214,6 +218,98 @@ export interface ApiTestimonial {
   updatedAt: string;
 }
 
+export type ApiCouponDiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
+export type ApiCouponStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'EXHAUSTED' | 'SCHEDULED';
+
+export interface ApiCoupon {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  discountType: ApiCouponDiscountType;
+  discountValue: number;
+  minOrderValue: number | null;
+  maxDiscountValue: number | null;
+  startsAt: string | null;
+  expiresAt: string | null;
+  usageLimit: number | null;
+  usageCount: number;
+  usageLimitPerCustomer: number | null;
+  isActive: boolean;
+  isSeasonal: boolean;
+  seasonalName: string | null;
+  status: ApiCouponStatus;
+  ordersCount: number;
+  revenue: number;
+  discountGiven: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiCouponValidation {
+  valid: boolean;
+  code: string;
+  message: string;
+  /** Código legível por máquina quando inválido: INVALID/INACTIVE/EXPIRED/etc. */
+  reason?: string;
+  discountType?: ApiCouponDiscountType;
+  /** Valor bruto do cupom (% ou R$). */
+  discountValue?: number;
+  /** Desconto real em R$ para o carrinho enviado. */
+  discountAmount: number;
+  freeShipping: boolean;
+  totalBeforeDiscount: number;
+  totalAfterDiscount: number;
+}
+
+export type ApiScriptCategory =
+  | 'COUPON'
+  | 'POST_SALE'
+  | 'QUOTE_RECOVERY'
+  | 'LAUNCH'
+  | 'SEASONAL_OFFER'
+  | 'FREE_SHIPPING'
+  | 'FEATURED_PRODUCT'
+  | 'RETURNING_CUSTOMER';
+
+export interface ApiLinkedCoupon {
+  id: string;
+  code: string;
+  name: string;
+  discountType: ApiCouponDiscountType;
+  discountValue: number;
+  minOrderValue: number | null;
+  expiresAt: string | null;
+}
+
+export interface ApiCouponScript {
+  id: string;
+  title: string;
+  description: string | null;
+  messageTemplate: string;
+  category: ApiScriptCategory;
+  linkedCouponId: string | null;
+  linkedCoupon: ApiLinkedCoupon | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiYoutubeVideo {
+  title: string;
+  url: string;
+  thumbnail?: string;
+  description?: string;
+  enabled?: boolean;
+}
+
+export interface ApiTrustItem {
+  title: string;
+  description?: string;
+  enabled?: boolean;
+}
+
 export interface ApiSettings {
   id: string;
   storeName: string;
@@ -232,6 +328,32 @@ export interface ApiSettings {
   pixDiscountPercent: number;
   freeShippingThreshold: number;
   shippingNote: string | null;
+  // R17
+  instagramHandle: string | null;
+  youtubeUrl: string | null;
+  youtubeHandle: string | null;
+  facebookUrl: string | null;
+  tiktokUrl: string | null;
+  communityInstagramEnabled: boolean;
+  communityInstagramTitle: string | null;
+  communityInstagramSubtitle: string | null;
+  youtubeSectionEnabled: boolean;
+  youtubeSectionTitle: string | null;
+  youtubeSectionSubtitle: string | null;
+  youtubeChannelUrl: string | null;
+  youtubeChannelLabel: string | null;
+  youtubeVideosJson: ApiYoutubeVideo[];
+  newsletterEnabled: boolean;
+  newsletterEyebrow: string | null;
+  newsletterTitle: string | null;
+  newsletterDescription: string | null;
+  newsletterButtonText: string | null;
+  newsletterPlaceholder: string | null;
+  newsletterSuccessMessage: string | null;
+  trustBlockEnabled: boolean;
+  trustItemsJson: ApiTrustItem[];
+  footerDescription: string | null;
+  footerShowSocials: boolean;
   createdAt: string;
   updatedAt: string;
 }
