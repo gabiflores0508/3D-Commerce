@@ -5,21 +5,27 @@ import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { formatBRL } from '@/utils/price';
 import { StatusBadge, statusLabels } from '@/components/admin/StatusBadge';
 import { Drawer } from '@/components/ui/Drawer';
-import { Select } from '@/components/ui/Input';
+import { Input, Label, Select } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Truck } from 'lucide-react';
 import type { Order, OrderStatus } from '@/types';
 import { useSEO } from '@/utils/seo';
 
 export default function Orders() {
   useSEO('Admin Pedidos');
-  const { orders, updateOrderStatus } = useAdminDataStore();
+  const { orders, updateOrderStatus, setTrackingCode } = useAdminDataStore();
   const [params] = useSearchParams();
   const initialStatus = (params.get('status') ?? 'all') as 'all' | OrderStatus;
   const [filter, setFilter] = useState<'all' | OrderStatus>(initialStatus);
   const [active, setActive] = useState<Order | null>(null);
+  const [trackingInput, setTrackingInput] = useState('');
   useEffect(() => {
     const s = params.get('status') as OrderStatus | null;
     if (s) setFilter(s);
   }, [params]);
+  useEffect(() => {
+    setTrackingInput(active?.shipping.trackingCode ?? '');
+  }, [active]);
 
   const filtered = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
 
@@ -98,6 +104,33 @@ export default function Orders() {
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">Endereço</p>
               <p>{active.address.street}, {active.address.number}</p>
               <p className="text-ink-mute">{active.address.district}, {active.address.city}/{active.address.state} — {active.address.cep}</p>
+            </div>
+
+            <div className="rounded-xl border border-ink-line p-4 text-sm">
+              <Label className="flex items-center gap-1.5">
+                <Truck className="h-3.5 w-3.5" /> Código de rastreio
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  value={trackingInput}
+                  onChange={(e) => setTrackingInput(e.target.value)}
+                  placeholder="Ex.: AA123456789BR"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const code = trackingInput.trim();
+                    setTrackingCode(active.id, code);
+                    setActive({ ...active, shipping: { ...active.shipping, trackingCode: code } });
+                    toast.success(code ? 'Código de rastreio salvo' : 'Código de rastreio removido');
+                  }}
+                >
+                  Salvar
+                </Button>
+              </div>
+              <p className="mt-1.5 text-xs text-ink-mute">
+                O cliente vê e rastreia por este código em “Meus pedidos”.
+              </p>
             </div>
 
             <div>

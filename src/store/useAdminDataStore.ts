@@ -28,6 +28,7 @@ interface AdminDataState {
   // Orders
   addOrder: (o: Order) => void;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
+  setTrackingCode: (id: string, code: string) => void;
   // Settings
   updateSettings: (patch: Partial<StoreSettings>) => void;
   // Reset
@@ -64,6 +65,12 @@ export const useAdminDataStore = create<AdminDataState>()(
       addOrder: (o) => set({ orders: [o, ...get().orders] }),
       updateOrderStatus: (id, status) =>
         set({ orders: get().orders.map((o) => (o.id === id ? { ...o, status } : o)) }),
+      setTrackingCode: (id, code) =>
+        set({
+          orders: get().orders.map((o) =>
+            o.id === id ? { ...o, shipping: { ...o.shipping, trackingCode: code } } : o,
+          ),
+        }),
 
       updateSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
 

@@ -132,6 +132,7 @@ export interface Order {
     method: string;
     price: number;
     deadline: string;
+    trackingCode?: string;
   };
   payment: {
     method: 'pix' | 'credito' | 'boleto';
@@ -144,6 +145,24 @@ export interface Order {
   subtotal: number;
   total: number;
   status: OrderStatus;
+}
+
+// Rastreamento (API SeuRastreio)
+export interface TrackingEvent {
+  codigo?: string;
+  descricao: string;
+  data: string; // ISO
+  local?: string;
+}
+
+export interface TrackingResult {
+  carrierName?: string;
+  status: string;
+  success: boolean;
+  eventoMaisRecente?: TrackingEvent;
+  historico: TrackingEvent[];
+  previsaoEntrega?: string;
+  linkDetalhesCompletos?: string;
 }
 
 export interface StoreSettings {
