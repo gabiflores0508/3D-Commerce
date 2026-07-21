@@ -3,12 +3,44 @@ import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { router } from '@/routes/AppRoutes';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
+import { useCustomerAuthStore } from '@/store/useCustomerAuthStore';
+import { useAdminAuthStore } from '@/store/useAdminAuthStore';
+import { useCartStore } from '@/store/useCartStore';
 
 export default function App() {
   const customLogo = useAdminDataStore((s) => s.settings.logo);
+  const bootAdminData = useAdminDataStore((s) => s.refresh);
+  const initCustomer = useCustomerAuthStore((s) => s.init);
+  const initAdmin = useAdminAuthStore((s) => s.init);
+  const fetchCart = useCartStore((s) => s.fetch);
+  const resetCart = useCartStore((s) => s.reset);
 
-  // Usa a logo do site como favicon. Se o admin enviou uma logo personalizada,
-  // o favicon passa a refletir essa logo; senão, mantém o favicon.svg padrão.
+  // Boot único: reidrata sessões e carrega dados públicos/admin.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await Promise.all([initCustomer(), initAdmin()]);
+      if (cancelled) return;
+      // Depois de reidratar, o refresh também pega dados admin se logado.
+      await bootAdminData();
+      // Carrinho vem do backend se cliente logado.
+      await fetchCart();
+    })();
+
+    function onAuthExpired() {
+      // Token expirou/rejeitado — limpa auth e carrinho para não ficar zumbi.
+      useCustomerAuthStore.getState().logoutCustomer();
+      useAdminAuthStore.getState().logout();
+      resetCart();
+    }
+    window.addEventListener('auth:expired', onAuthExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('auth:expired', onAuthExpired);
+    };
+  }, [initCustomer, initAdmin, bootAdminData, fetchCart, resetCart]);
+
+  // Favicon reflete a logo custom quando disponível.
   useEffect(() => {
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {

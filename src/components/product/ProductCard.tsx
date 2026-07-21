@@ -6,25 +6,34 @@ import { Badge } from '@/components/ui/Badge';
 import { formatBRL, getDiscountPercent, getEffectivePrice, getPixPrice } from '@/utils/price';
 import { useCartStore } from '@/store/useCartStore';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/store/useUIStore';
 import { whatsappProduct } from '@/utils/whatsapp';
 
 export function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const setCartOpen = useUIStore((s) => s.setCartOpen);
+  const navigate = useNavigate();
   const effective = getEffectivePrice(product);
   const pix = getPixPrice(product);
   const discount = getDiscountPercent(product);
   const isOutOfStock = product.stock <= 0;
   const isQuoteOnly = product.purchaseMode === 'quote';
 
-  function handleAdd(e: React.MouseEvent) {
+  async function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-    addItem(product.id, 1);
-    toast.success(`${product.name} adicionado ao carrinho`);
-    setTimeout(() => setCartOpen(true), 250);
+    const res = await addItem(product.id, 1);
+    if (res.ok) {
+      toast.success(`${product.name} adicionado ao carrinho`);
+      setCartOpen(true);
+    } else if (res.requiresAuth) {
+      toast.error('Faça login para adicionar ao carrinho.');
+      navigate('/login');
+    } else {
+      toast.error(res.error ?? 'Não foi possível adicionar ao carrinho.');
+    }
   }
 
   return (

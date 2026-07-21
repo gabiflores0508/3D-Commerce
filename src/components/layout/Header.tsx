@@ -29,6 +29,23 @@ export function Header() {
   const logoutCustomer = useCustomerAuthStore((s) => s.logoutCustomer);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+  // Timer de fechamento por hover — evita que o dropdown suma ao mover o mouse
+  // do botão até o menu (atravessando o pequeno gap entre eles).
+  const accountCloseTimer = useRef<number | null>(null);
+  function openAccount() {
+    if (accountCloseTimer.current !== null) {
+      window.clearTimeout(accountCloseTimer.current);
+      accountCloseTimer.current = null;
+    }
+    setAccountOpen(true);
+  }
+  function scheduleCloseAccount() {
+    if (accountCloseTimer.current !== null) window.clearTimeout(accountCloseTimer.current);
+    accountCloseTimer.current = window.setTimeout(() => {
+      setAccountOpen(false);
+      accountCloseTimer.current = null;
+    }, 180);
+  }
 
   useEffect(() => {
     if (!accountOpen) return;
@@ -47,6 +64,10 @@ export function Header() {
       document.removeEventListener('keydown', onKey);
     };
   }, [accountOpen]);
+
+  useEffect(() => () => {
+    if (accountCloseTimer.current !== null) window.clearTimeout(accountCloseTimer.current);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -151,8 +172,8 @@ export function Header() {
               <div
                 ref={accountRef}
                 className="relative"
-                onMouseEnter={() => setAccountOpen(true)}
-                onMouseLeave={() => setAccountOpen(false)}
+                onMouseEnter={openAccount}
+                onMouseLeave={scheduleCloseAccount}
               >
                 <button
                   className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-semibold text-ink-soft hover:bg-ink/5 hover:text-ink"

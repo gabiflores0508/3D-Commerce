@@ -1,0 +1,17 @@
+import { z } from 'zod';
+
+/** POST /api/auth/register */
+export const registerSchema = z.object({
+  name: z.string().trim().min(2, 'Informe seu nome (mínimo 2 caracteres).'),
+  email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+  password: z.string().min(6, 'A senha precisa ter no mínimo 6 caracteres.'),
+  phone: z.string().trim().optional(),
+});
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+/** POST /api/auth/login */
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+  password: z.string().min(1, 'Informe a senha.'),
+});
+export type LoginInput = z.infer<typeof loginSchema>;

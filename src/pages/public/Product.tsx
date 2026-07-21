@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight, MessageCircle, Minus, Plus, ShieldCheck, ShoppingBag, Truck, Wrench } from 'lucide-react';
+import { ChevronRight, MessageCircle, Minus, PackageX, Plus, ShieldCheck, ShoppingBag, Truck, Wrench } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
@@ -12,12 +12,16 @@ import { ShowcaseSection } from '@/components/home/ShowcaseSection';
 import { Markdown } from '@/components/ui/Markdown';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { formatBRL, getDiscountPercent, getEffectivePrice, getPixPrice, calcInstallment } from '@/utils/price';
-import { whatsappProduct } from '@/utils/whatsapp';
-import { useSEO } from '@/utils/seo';
+import { whatsappProduct, whatsappQuoteProduct } from '@/utils/whatsapp';
+import { useSEO, useJsonLd } from '@/utils/seo';
+
+const LOW_STOCK_THRESHOLD = 5;
 
 export default function Product() {
   const { slug } = useParams();
   const products = useAdminDataStore((s) => s.products);
+  const categories = useAdminDataStore((s) => s.categories);
+  const settings = useAdminDataStore((s) => s.settings);
   const product = products.find((p) => p.slug === slug);
   const addItem = useCartStore((s) => s.addItem);
   const setCartOpen = useUIStore((s) => s.setCartOpen);
@@ -29,12 +33,42 @@ export default function Product() {
 
   useSEO(product?.name ?? 'Produto', product?.shortDescription);
 
+  const category = useMemo(
+    () => categories.find((c) => product?.categoryIds.includes(c.id)),
+    [categories, product],
+  );
+
   const related = useMemo(() => {
     if (!product) return [];
     return products
       .filter((p) => p.id !== product.id && p.categoryIds.some((c) => product.categoryIds.includes(c)) && p.active)
       .slice(0, 4);
   }, [products, product]);
+
+  // JSON-LD Product (SEO). Só injeta com produto válido.
+  const productUrl = typeof window !== 'undefined' ? window.location.href : '';
+  useJsonLd(
+    product
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: product.name,
+          description: product.shortDescription || product.name,
+          image: product.images.filter((i) => /^https?:/i.test(i)),
+          brand: { '@type': 'Brand', name: product.brand },
+          offers: {
+            '@type': 'Offer',
+            price: getEffectivePrice(product),
+            priceCurrency: 'BRL',
+            availability:
+              product.stock > 0
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/OutOfStock',
+            url: productUrl,
+          },
+        }
+      : null,
+  );
 
   if (!product) {
     return (
@@ -56,28 +90,55 @@ export default function Product() {
   const installment = calcInstallment(basePrice);
   const isQuoteOnly = product.purchaseMode === 'quote';
   const isOutOfStock = product.stock <= 0;
+  const isLowStock = !isQuoteOnly && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
+  const savings = product.promoPrice ? fullPrice - basePrice : 0;
+  const quoteHref = whatsappQuoteProduct(product, qty, productUrl, variation?.label);
+  const descText = product.description?.trim() || product.shortDescription?.trim() || '';
+  const hasSpecs = Object.keys(product.attributes).length > 0;
 
-  function addToCart() {
+  async function addToCart() {
     if (isOutOfStock || isQuoteOnly) return;
-    addItem(product!.id, qty, variation?.id, variation?.label);
-    toast.success(`${product!.name} adicionado ao carrinho`);
-    setTimeout(() => setCartOpen(true), 250);
+    const res = await addItem(product!.id, qty, variation?.id, variation?.label);
+    if (res.ok) {
+      toast.success(`${product!.name} adicionado ao carrinho`);
+      setCartOpen(true); // abre a gaveta só depois de o item estar no estado
+    } else if (res.requiresAuth) {
+      toast.error('Faça login para adicionar ao carrinho.');
+      navigate('/login');
+    } else {
+      toast.error(res.error ?? 'Não foi possível adicionar ao carrinho.');
+    }
   }
 
-  function buyNow() {
+  async function buyNow() {
     if (isOutOfStock || isQuoteOnly) return;
-    // Compra direta: adiciona ao carrinho e vai para o checkout, sem abrir a gaveta lateral.
-    addItem(product!.id, qty, variation?.id, variation?.label);
-    navigate('/checkout');
+    const res = await addItem(product!.id, qty, variation?.id, variation?.label);
+    if (res.ok) {
+      navigate('/checkout');
+    } else if (res.requiresAuth) {
+      toast.error('Faça login para finalizar a compra.');
+      navigate('/login');
+    } else {
+      toast.error(res.error ?? 'Não foi possível continuar.');
+    }
   }
 
   return (
     <div className="container-x py-8">
-      <nav className="mb-5 flex items-center gap-1 text-xs text-ink-mute">
+      <nav className="mb-5 flex flex-wrap items-center gap-1 text-xs text-ink-mute">
         <Link to="/" className="hover:text-ink">Início</Link>
         <ChevronRight className="h-3 w-3" />
-        <Link to="/loja" className="hover:text-ink">Loja</Link>
-        <ChevronRight className="h-3 w-3" />
+        {category ? (
+          <>
+            <Link to={`/categoria/${category.slug}`} className="hover:text-ink">{category.name}</Link>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        ) : (
+          <>
+            <Link to="/loja" className="hover:text-ink">Loja</Link>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        )}
         <span className="truncate text-ink">{product.name}</span>
       </nav>
 
@@ -94,7 +155,16 @@ export default function Product() {
                 <Badge key={b} type={b} />
               ))}
             </div>
-            <img src={product.images[imageIdx]} alt={product.name} className="h-full w-full object-cover" />
+            <img
+              src={product.images[imageIdx]}
+              alt={product.name}
+              loading="eager"
+              onError={(e) => {
+                // Fallback elegante: some com a imagem quebrada e revela o fundo do card.
+                (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+              }}
+              className="h-full w-full object-cover"
+            />
           </motion.div>
           {product.images.length > 1 && (
             <div className="mt-3 grid grid-cols-5 gap-2">
@@ -126,6 +196,11 @@ export default function Product() {
                 <span className="rounded-md bg-rose-500 px-2 py-1 text-xs font-bold text-white shadow-sm shadow-rose-500/30">-{discount}%</span>
               )}
             </div>
+            {savings > 0 && (
+              <p className="mt-1.5 text-sm font-semibold text-emerald-600">
+                Você economiza {formatBRL(savings)} ({discount}%)
+              </p>
+            )}
             <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               {formatBRL(pix)} no Pix
@@ -160,8 +235,14 @@ export default function Product() {
             </div>
           )}
 
-          {!isQuoteOnly && (
-            <div className="mt-6 flex items-center gap-3">
+          {isOutOfStock && !isQuoteOnly && (
+            <div className="mt-6 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600">
+              <PackageX className="h-4 w-4" /> Produto indisponível no momento
+            </div>
+          )}
+
+          {!isOutOfStock && (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <p className="text-xs font-bold uppercase tracking-wide text-ink-mute">Quantidade</p>
               <div className="inline-flex items-center rounded-xl border border-ink-line">
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="p-2 hover:bg-ink/5" aria-label="Diminuir">
@@ -172,21 +253,26 @@ export default function Product() {
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <span className={`text-xs ${product.stock > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {product.stock > 0 ? `${product.stock} em estoque` : 'Esgotado'}
-              </span>
+              {!isQuoteOnly &&
+                (isLowStock ? (
+                  <span className="text-xs font-semibold text-amber-600">
+                    Poucas unidades ({product.stock} restante{product.stock > 1 ? 's' : ''})
+                  </span>
+                ) : (
+                  <span className="text-xs text-emerald-600">{product.stock} em estoque</span>
+                ))}
             </div>
           )}
 
           <div className="mt-6 space-y-3">
             {isQuoteOnly ? (
-              <a href={whatsappProduct(product, variation?.label)} target="_blank" rel="noreferrer" className="btn-whatsapp w-full">
+              <a href={quoteHref} target="_blank" rel="noopener noreferrer" className="btn-whatsapp w-full">
                 <MessageCircle className="h-4 w-4" /> Solicitar orçamento via WhatsApp
               </a>
             ) : (
               <>
                 <Button fullWidth size="lg" onClick={buyNow} disabled={isOutOfStock}>
-                  <ShoppingBag className="h-4 w-4" /> Comprar agora
+                  <ShoppingBag className="h-4 w-4" /> {isOutOfStock ? 'Produto indisponível' : 'Comprar agora'}
                 </Button>
                 <Button fullWidth size="lg" variant="secondary" onClick={addToCart} disabled={isOutOfStock}>
                   Adicionar ao carrinho
@@ -194,59 +280,89 @@ export default function Product() {
               </>
             )}
             {product.purchaseMode === 'both' && (
-              <a
-                href={whatsappProduct(product, variation?.label)}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-whatsapp w-full"
-              >
-                <MessageCircle className="h-4 w-4" /> Tirar dúvida no WhatsApp
+              <a href={quoteHref} target="_blank" rel="noopener noreferrer" className="btn-whatsapp w-full">
+                <MessageCircle className="h-4 w-4" /> Solicitar orçamento
               </a>
             )}
             {product.purchaseMode === 'direct' && (
               <a
-                href={whatsappProduct(product, variation?.label)}
+                href={quoteHref}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="block w-full text-center text-xs font-semibold text-ink-mute hover:text-emerald-600"
               >
-                Tirar dúvida pelo WhatsApp →
+                Tirar dúvida ou pedir orçamento pelo WhatsApp →
               </a>
             )}
           </div>
 
-          <ul className="mt-8 grid grid-cols-2 gap-3 border-t border-ink-line pt-6 text-xs text-ink-soft">
-            <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><Truck className="h-3.5 w-3.5" /></span> Envio para todo Brasil</li>
-            <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><ShieldCheck className="h-3.5 w-3.5" /></span> Compra segura</li>
-            <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><Wrench className="h-3.5 w-3.5" /></span> Suporte técnico incluso</li>
-            <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><MessageCircle className="h-3.5 w-3.5" /></span> Atendimento direto</li>
-          </ul>
+          {(() => {
+            const customTrust = settings.trustBlockEnabled
+              ? settings.trustItems.filter((t) => t.enabled !== false && t.title)
+              : [];
+            if (customTrust.length > 0) {
+              // Itens editáveis via Configurações (fallback: grid fixo abaixo).
+              return (
+                <ul className="mt-8 grid grid-cols-1 gap-3 border-t border-ink-line pt-6 text-xs text-ink-soft sm:grid-cols-2">
+                  {customTrust.map((t, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-bg-soft text-ink">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                      </span>
+                      <span>
+                        <b className="text-ink">{t.title}</b>
+                        {t.description && <span className="block text-ink-mute">{t.description}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              );
+            }
+            return (
+              <ul className="mt-8 grid grid-cols-2 gap-3 border-t border-ink-line pt-6 text-xs text-ink-soft">
+                <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><Truck className="h-3.5 w-3.5" /></span> Envio para todo Brasil</li>
+                <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><ShieldCheck className="h-3.5 w-3.5" /></span> Compra segura</li>
+                <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><Wrench className="h-3.5 w-3.5" /></span> Suporte técnico incluso</li>
+                <li className="flex items-center gap-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-bg-soft text-ink"><MessageCircle className="h-3.5 w-3.5" /></span> Atendimento direto</li>
+              </ul>
+            );
+          })()}
+          <p className="mt-4 rounded-xl bg-bg-soft/60 p-3 text-xs leading-relaxed text-ink-mute">
+            Finalize seu pedido ou solicite um orçamento para confirmar detalhes de produção e envio.
+            Nossa equipe pode entrar em contato para alinhar personalização, prazo e entrega.
+          </p>
         </div>
       </div>
 
-      <section className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className={`card p-6 ${Object.keys(product.attributes).length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-          <h2 className="text-lg font-bold">Descrição do produto</h2>
-          <Collapsible collapsedHeight={220}>
-            <Markdown content={product.description} className="mt-3" />
-          </Collapsible>
-        </div>
-        {Object.keys(product.attributes).length > 0 && (
-          <div className="card p-6">
-            <h2 className="text-lg font-bold">Especificações</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              {Object.entries(product.attributes).map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-3 border-b border-ink-line/50 pb-1.5">
-                  <dt className="text-ink-mute">{k}</dt>
-                  <dd className="text-right font-medium text-ink">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )}
-      </section>
+      {(descText || hasSpecs) && (
+        <section className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {descText && (
+            <div className={`card p-6 ${hasSpecs ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+              <h2 className="text-lg font-bold">Descrição do produto</h2>
+              <Collapsible collapsedHeight={220}>
+                <Markdown content={descText} className="mt-3" />
+              </Collapsible>
+            </div>
+          )}
+          {hasSpecs && (
+            <div className={`card p-6 ${descText ? '' : 'lg:col-span-3'}`}>
+              <h2 className="text-lg font-bold">Especificações</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                {Object.entries(product.attributes).map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3 border-b border-ink-line/50 pb-1.5">
+                    <dt className="text-ink-mute">{k}</dt>
+                    <dd className="text-right font-medium text-ink">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+        </section>
+      )}
 
-      <ShowcaseSection eyebrow="Você também pode gostar" title="Produtos relacionados" products={related} />
+      {related.length > 0 && (
+        <ShowcaseSection eyebrow="Você também pode gostar" title="Produtos relacionados" products={related} />
+      )}
     </div>
   );
 }

@@ -14,11 +14,13 @@ import { useSEO } from '@/utils/seo';
 export default function Orders() {
   useSEO('Admin Pedidos');
   const { orders, updateOrderStatus, setTrackingCode } = useAdminDataStore();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const initialStatus = (params.get('status') ?? 'all') as 'all' | OrderStatus;
   const [filter, setFilter] = useState<'all' | OrderStatus>(initialStatus);
   const [active, setActive] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState('');
+  const [savingTracking, setSavingTracking] = useState(false);
+  const couponParam = params.get('cupom');
   useEffect(() => {
     const s = params.get('status') as OrderStatus | null;
     if (s) setFilter(s);
@@ -27,7 +29,17 @@ export default function Orders() {
     setTrackingInput(active?.shipping.trackingCode ?? '');
   }, [active]);
 
-  const filtered = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
+  const filtered = orders.filter((o) => {
+    if (filter !== 'all' && o.status !== filter) return false;
+    if (couponParam && o.coupon?.code !== couponParam) return false;
+    return true;
+  });
+
+  function clearCouponFilter() {
+    const next = new URLSearchParams(params);
+    next.delete('cupom');
+    setParams(next, { replace: true });
+  }
 
   return (
     <div>
@@ -36,6 +48,14 @@ export default function Orders() {
           <p className="eyebrow">Operação</p>
           <h1 className="section-title">Pedidos</h1>
           <p className="mt-1 text-sm text-ink-mute">{filtered.length} pedido(s)</p>
+          {couponParam && (
+            <button
+              onClick={clearCouponFilter}
+              className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              Cupom: {couponParam} · limpar ✕
+            </button>
+          )}
         </div>
         <Select value={filter} onChange={(e) => setFilter(e.target.value as 'all' | OrderStatus)} className="max-w-[220px]">
           <option value="all">Todos os status</option>
@@ -52,6 +72,7 @@ export default function Orders() {
               <th className="px-4 py-3">Pedido</th>
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Data</th>
+              <th className="px-4 py-3">Cupom</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3"></th>
@@ -63,6 +84,15 @@ export default function Orders() {
                 <td className="px-4 py-3 font-semibold">{o.id}</td>
                 <td className="px-4 py-3">{o.customer.name}</td>
                 <td className="px-4 py-3 text-ink-mute">{new Date(o.createdAt).toLocaleDateString('pt-BR')}</td>
+                <td className="px-4 py-3">
+                  {o.coupon ? (
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-700">
+                      {o.coupon.code}
+                    </span>
+                  ) : (
+                    <span className="text-ink-mute">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{formatBRL(o.total)}</td>
                 <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                 <td className="px-4 py-3">
@@ -118,11 +148,19 @@ export default function Orders() {
                 />
                 <Button
                   size="sm"
-                  onClick={() => {
+                  loading={savingTracking}
+                  onClick={async () => {
                     const code = trackingInput.trim();
-                    setTrackingCode(active.id, code);
-                    setActive({ ...active, shipping: { ...active.shipping, trackingCode: code } });
-                    toast.success(code ? 'Código de rastreio salvo' : 'Código de rastreio removido');
+                    setSavingTracking(true);
+                    try {
+                      await setTrackingCode(active.id, code);
+                      setActive({ ...active, shipping: { ...active.shipping, trackingCode: code || undefined } });
+                      toast.success(code ? 'Código de rastreio salvo' : 'Código de rastreio removido');
+                    } catch {
+                      toast.error('Não foi possível salvar o código de rastreio.');
+                    } finally {
+                      setSavingTracking(false);
+                    }
                   }}
                 >
                   Salvar

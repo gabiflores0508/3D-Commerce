@@ -147,6 +147,20 @@ export interface Order {
   status: OrderStatus;
 }
 
+export interface YoutubeVideoItem {
+  title: string;
+  url: string;
+  thumbnail?: string;
+  description?: string;
+  enabled?: boolean;
+}
+
+export interface TrustItemContent {
+  title: string;
+  description?: string;
+  enabled?: boolean;
+}
+
 // Rastreamento (API SeuRastreio)
 export interface TrackingEvent {
   codigo?: string;
@@ -177,6 +191,32 @@ export interface StoreSettings {
   freeShippingThreshold: number;
   pixDiscountPercent: number;
   logo?: string;
+  // R17 — conteúdos editáveis
+  instagramHandle: string;
+  youtubeUrl: string;
+  youtubeHandle: string;
+  facebookUrl: string;
+  tiktokUrl: string;
+  communityInstagramEnabled: boolean;
+  communityInstagramTitle: string;
+  communityInstagramSubtitle: string;
+  youtubeSectionEnabled: boolean;
+  youtubeSectionTitle: string;
+  youtubeSectionSubtitle: string;
+  youtubeChannelUrl: string;
+  youtubeChannelLabel: string;
+  youtubeVideos: YoutubeVideoItem[];
+  newsletterEnabled: boolean;
+  newsletterEyebrow: string;
+  newsletterTitle: string;
+  newsletterDescription: string;
+  newsletterButtonText: string;
+  newsletterPlaceholder: string;
+  newsletterSuccessMessage: string;
+  trustBlockEnabled: boolean;
+  trustItems: TrustItemContent[];
+  footerDescription: string;
+  footerShowSocials: boolean;
 }
 
 export interface CartItem {

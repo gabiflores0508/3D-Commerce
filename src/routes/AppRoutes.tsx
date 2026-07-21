@@ -35,6 +35,10 @@ const AdminCategories = lazy(() => import('@/pages/admin/Categories'));
 const AdminSeasonal = lazy(() => import('@/pages/admin/SeasonalCategory'));
 const AdminBanners = lazy(() => import('@/pages/admin/Banners'));
 const AdminOrders = lazy(() => import('@/pages/admin/Orders'));
+const AdminQuotes = lazy(() => import('@/pages/admin/Quotes'));
+const AdminTestimonials = lazy(() => import('@/pages/admin/Testimonials'));
+const AdminCoupons = lazy(() => import('@/pages/admin/Coupons'));
+const AdminScripts = lazy(() => import('@/pages/admin/Scripts'));
 const AdminSettings = lazy(() => import('@/pages/admin/Settings'));
 
 function PageFallback() {
@@ -89,6 +93,10 @@ export const router = createBrowserRouter([
       { path: 'categoria-sazonal', element: <L><AdminSeasonal /></L> },
       { path: 'banners', element: <L><AdminBanners /></L> },
       { path: 'pedidos', element: <L><AdminOrders /></L> },
+      { path: 'orcamentos', element: <L><AdminQuotes /></L> },
+      { path: 'cupons', element: <L><AdminCoupons /></L> },
+      { path: 'depoimentos', element: <L><AdminTestimonials /></L> },
+      { path: 'scripts', element: <L><AdminScripts /></L> },
       { path: 'configuracoes', element: <L><AdminSettings /></L> },
     ],
   },

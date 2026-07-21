@@ -5,27 +5,33 @@ import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/Button';
 import { Input, Label } from '@/components/ui/Input';
 import { useAdminAuthStore } from '@/store/useAdminAuthStore';
+import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { Logo } from '@/components/ui/Logo';
 import { useSEO } from '@/utils/seo';
-import { site } from '@/config/site';
 
 export default function Login() {
   useSEO('Admin Login');
-  const { isAuthenticated, login } = useAdminAuthStore();
-  const [email, setEmail] = useState<string>(site.admin.email);
-  const [password, setPassword] = useState<string>(site.admin.password);
+  const isAuthenticated = useAdminAuthStore((s) => s.isAuthenticated);
+  const login = useAdminAuthStore((s) => s.login);
+  const loading = useAdminAuthStore((s) => s.loading);
+  const refreshAdmin = useAdminDataStore((s) => s.refreshAdmin);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
   if (isAuthenticated) return <Navigate to="/admin" replace />;
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (login(email, password)) {
-      toast.success('Bem-vindo!');
-      navigate('/admin');
-    } else {
-      toast.error('Credenciais inválidas');
+    const ok = await login(email, password);
+    if (!ok) {
+      toast.error('E-mail ou senha inválidos.');
+      return;
     }
+    toast.success('Bem-vindo!');
+    // Puxa dados admin já com o token válido.
+    await refreshAdmin();
+    navigate('/admin');
   }
 
   return (
@@ -41,7 +47,15 @@ export default function Login() {
             <Label>E-mail</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-mute" />
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} className="!pl-9" />
+              <Input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="!pl-9"
+                placeholder="seu-email@exemplo.com"
+                required
+              />
             </div>
           </div>
           <div>
@@ -50,21 +64,19 @@ export default function Login() {
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-mute" />
               <Input
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="!pl-9"
+                required
               />
             </div>
           </div>
         </div>
 
-        <Button type="submit" fullWidth className="mt-6">
+        <Button type="submit" fullWidth className="mt-6" loading={loading}>
           Entrar
         </Button>
-
-        <p className="mt-5 rounded-xl bg-bg-soft p-3 text-[11px] text-ink-mute">
-          ⓘ Demo: <code>{site.admin.email}</code> / <code>{site.admin.password}</code>
-        </p>
       </form>
     </div>
   );

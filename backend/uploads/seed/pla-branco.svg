@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#E7E5E0"/>
+  <rect x="24" y="24" width="552" height="552" fill="none" stroke="#C9C6BE" stroke-width="2" stroke-dasharray="10 8"/>
+  <text x="300" y="290" font-family="Arial, sans-serif" font-size="28" fill="#8A8880" text-anchor="middle">3DCommerce</text>
+  <text x="300" y="330" font-family="Arial, sans-serif" font-size="20" fill="#8A8880" text-anchor="middle">PLA Branco</text>
+</svg>

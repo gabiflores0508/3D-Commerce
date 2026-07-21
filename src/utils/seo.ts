@@ -15,3 +15,22 @@ export function useSEO(title: string, description?: string) {
     }
   }, [title, description]);
 }
+
+/**
+ * Injeta um bloco JSON-LD (`<script type="application/ld+json">`) no head e
+ * remove ao desmontar. O conteúdo é serializado via `JSON.stringify` (seguro:
+ * sem interpolação de HTML). Passe `null` para não injetar nada.
+ */
+export function useJsonLd(data: Record<string, unknown> | null) {
+  const json = data ? JSON.stringify(data) : null;
+  useEffect(() => {
+    if (!json) return;
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = json;
+    document.head.appendChild(script);
+    return () => {
+      script.remove();
+    };
+  }, [json]);
+}

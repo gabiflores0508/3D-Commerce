@@ -26,8 +26,8 @@ export default function CustomerLogin() {
 
   if (isLogged) return <Navigate to="/minha-conta" replace />;
 
-  function onSubmit(d: Data) {
-    const r = loginCustomer(d.email, d.password);
+  async function onSubmit(d: Data) {
+    const r = await loginCustomer(d.email, d.password);
     if (r.ok) {
       toast.success('Bem-vindo de volta!');
       navigate('/minha-conta');
@@ -61,9 +61,6 @@ export default function CustomerLogin() {
           <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
             Entrar
           </Button>
-          <p className="rounded-xl bg-bg-soft p-3 text-[11px] leading-relaxed text-ink-mute">
-            Área demonstrativa: os dados são salvos apenas neste navegador.
-          </p>
         </form>
 
         <div className="mt-5 flex flex-col items-center gap-2 text-sm">

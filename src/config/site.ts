@@ -14,15 +14,12 @@ export const site = {
   shippingNote: 'Enviamos para todo o Brasil',
   freeShippingThreshold: 299,
   pixDiscountPercent: 5,
-  admin: {
-    email: 'admin@3dcommerce.com',
-    password: '3dcommerce2026',
-  },
-  coupons: {
-    BEMVINDO10: { type: 'percent', value: 10, label: 'Boas-vindas 10% off' },
-    PIX5: { type: 'percent', value: 5, label: 'Pix extra 5%' },
-    FRETE3D: { type: 'shipping', value: 100, label: 'Frete grátis' },
-  } as const,
 } as const;
 
-export type CouponCode = keyof typeof site.coupons;
+// Nota (R17): YouTube e demais conteúdos de comunidade/newsletter agora são
+// editáveis no admin (SiteSettings). O Instagram fixo abaixo (`instagram`/
+// `instagramHandle`) segue como fallback de primeira renderização.
+
+// Nota (R14): os blocos legados `admin` (credencial fixa) e `coupons` (cupons
+// hardcoded) foram removidos. O login usa autenticação real no backend (JWT) e
+// os cupons vivem exclusivamente no banco (módulo /api/*/coupons).

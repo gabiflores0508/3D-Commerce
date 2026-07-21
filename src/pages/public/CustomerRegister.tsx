@@ -40,9 +40,9 @@ export default function CustomerRegister() {
 
   if (isLogged) return <Navigate to="/minha-conta" replace />;
 
-  function onSubmit(d: Data) {
+  async function onSubmit(d: Data) {
     const hasAddress = d.cep && d.street && d.number && d.district && d.city && d.state;
-    const r = registerCustomer({
+    const r = await registerCustomer({
       name: d.name,
       email: d.email,
       phone: d.phone,
@@ -143,10 +143,6 @@ export default function CustomerRegister() {
               </div>
             </div>
           </section>
-
-          <p className="rounded-xl bg-bg-soft p-3 text-[11px] leading-relaxed text-ink-mute">
-            Área demonstrativa: os dados são salvos apenas neste navegador.
-          </p>
 
           <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
             Criar conta

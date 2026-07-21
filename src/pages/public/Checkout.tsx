@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,9 +12,12 @@ import { Input, Label, Select } from '@/components/ui/Input';
 import { formatBRL } from '@/utils/price';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSEO } from '@/utils/seo';
-import type { Order, OrderItem } from '@/types';
 import { useCurrentCustomer } from '@/store/useCustomerAuthStore';
 import { maskPhone, maskCPF, maskCEP } from '@/utils/masks';
+import { orderService } from '@/services/orderService';
+import { ApiError } from '@/services/api';
+import { apiOrderToInternal } from '@/services/adapters';
+import type { ApiPaymentMethod } from '@/services/types';
 
 const customerSchema = z.object({
   name: z.string().min(3, 'Informe seu nome completo'),
@@ -43,7 +46,11 @@ const steps = ['Cliente', 'Endereço', 'Entrega', 'Pagamento', 'Revisão'] as co
 export default function Checkout() {
   useSEO('Checkout');
   const navigate = useNavigate();
-  const { items, coupon, clear } = useCartStore();
+  const {
+    items, appliedCoupon, clear,
+    applyCoupon, removeCoupon, revalidateCoupon, couponLoading, couponError,
+  } = useCartStore();
+  const [couponCode, setCouponCode] = useState('');
   const products = useAdminDataStore((s) => s.products);
   const addOrder = useAdminDataStore((s) => s.addOrder);
   const loggedCustomer = useCurrentCustomer();
@@ -73,11 +80,25 @@ export default function Checkout() {
   const [done, setDone] = useState<string | null>(null);
 
   const subtotal = getCartSubtotal(items, products);
-  const discount = getCartDiscount(subtotal, coupon);
-  const cartShipping = getCartShipping(subtotal, coupon);
+  const discount = getCartDiscount(subtotal, appliedCoupon);
+  const cartShipping = getCartShipping(subtotal, appliedCoupon);
+
+  // Revalida o cupom sempre que o subtotal mudar (remove se inválido).
+  useEffect(() => {
+    if (appliedCoupon && subtotal > 0) revalidateCoupon(subtotal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  async function handleApplyCoupon() {
+    if (!couponCode.trim()) return;
+    const okApplied = await applyCoupon(couponCode, subtotal);
+    if (okApplied) toast.success('Cupom aplicado!');
+    setCouponCode('');
+  }
+  const freeShip = !!appliedCoupon?.freeShipping;
   const shippingPrices: Record<ShippingMethod, { price: number; label: string; deadline: string }> = {
     pac: { price: cartShipping, label: 'PAC', deadline: '5 a 8 dias úteis' },
-    sedex: { price: cartShipping + 18, label: 'Sedex', deadline: '2 a 4 dias úteis' },
+    sedex: { price: freeShip ? 0 : cartShipping + 18, label: 'Sedex', deadline: '2 a 4 dias úteis' },
     retirada: { price: 0, label: 'Retirada na loja', deadline: 'Em até 1 dia útil' },
   };
   const finalShipping = shippingPrices[shipping].price;
@@ -201,47 +222,49 @@ export default function Checkout() {
               installments={installments}
               total={total}
               onBack={() => setStep(3)}
-              onConfirm={() => {
-                const id = `#3DC-${String(Math.floor(1000 + Math.random() * 9000))}`;
-                const orderItems: OrderItem[] = items.map((it) => {
-                  const p = products.find((x) => x.id === it.productId);
-                  return {
-                    productId: it.productId,
-                    name: p?.name ?? 'Produto',
-                    image: p?.images[0] ?? '',
-                    variationLabel: it.variationLabel,
-                    qty: it.qty,
-                    unitPrice: p ? p.promoPrice ?? p.price : 0,
-                  };
-                });
-                const order: Order = {
-                  id,
-                  createdAt: new Date().toISOString(),
-                  customerId: loggedCustomer?.id,
-                  customer,
-                  address,
-                  items: orderItems,
-                  shipping: {
-                    method: shippingPrices[shipping].label,
-                    price: shippingPrices[shipping].price,
-                    deadline: shippingPrices[shipping].deadline,
-                  },
-                  payment: {
-                    method: payment,
-                    installments: payment === 'credito' ? installments : undefined,
-                  },
-                  coupon: coupon
-                    ? { code: coupon, discount }
-                    : undefined,
-                  subtotal,
-                  total,
-                  status: payment === 'boleto' ? 'aguardando-pagamento' : 'novo',
+              onConfirm={async () => {
+                if (!loggedCustomer) {
+                  toast.error('Faça login para finalizar a compra.');
+                  return;
+                }
+                const paymentMap: Record<PaymentMethod, ApiPaymentMethod> = {
+                  pix: 'PIX',
+                  credito: 'CREDIT_CARD',
+                  boleto: 'BOLETO',
                 };
-                addOrder(order);
-                toast.success(`Pedido ${id} confirmado!`);
-                clear();
-                setDone(id);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                try {
+                  const { order } = await orderService.create({
+                    customerName: customer.name,
+                    customerEmail: customer.email,
+                    customerPhone: customer.phone,
+                    address: {
+                      recipientName: customer.name,
+                      phone: customer.phone,
+                      zipCode: address.cep,
+                      street: address.street,
+                      number: address.number,
+                      complement: address.complement ?? null,
+                      district: address.district,
+                      city: address.city,
+                      state: address.state,
+                      country: 'Brasil',
+                    },
+                    shippingValue: shippingPrices[shipping].price,
+                    couponCode: appliedCoupon?.code ?? null,
+                    paymentMethod: paymentMap[payment],
+                    notes: null,
+                  });
+                  // Otimista: espelha no store admin.
+                  addOrder(apiOrderToInternal(order));
+                  toast.success(`Pedido confirmado!`);
+                  // Backend já limpou o carrinho — refaz fetch para atualizar UI.
+                  await clear();
+                  setDone(order.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                } catch (err) {
+                  const msg = err instanceof ApiError ? err.message : 'Erro ao criar pedido.';
+                  toast.error(msg);
+                }
               }}
             />
           )}
@@ -268,10 +291,13 @@ export default function Checkout() {
               <dt className="text-ink-mute">Subtotal</dt>
               <dd>{formatBRL(subtotal)}</dd>
             </div>
-            {discount > 0 && (
+            {appliedCoupon && (
               <div className="flex justify-between text-emerald-600">
-                <dt>Cupom</dt>
-                <dd>-{formatBRL(discount)}</dd>
+                <dt>
+                  Cupom {appliedCoupon.code}{' '}
+                  <button onClick={removeCoupon} className="text-xs underline">remover</button>
+                </dt>
+                <dd>{appliedCoupon.freeShipping ? 'Frete grátis' : `-${formatBRL(discount)}`}</dd>
               </div>
             )}
             <div className="flex justify-between">
@@ -283,6 +309,24 @@ export default function Checkout() {
               <dd>{formatBRL(total)}</dd>
             </div>
           </dl>
+
+          {!appliedCoupon && (
+            <div className="mt-4 border-t border-ink-line pt-4">
+              <p className="label">Cupom de desconto</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: BLACK10"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                />
+                <Button variant="secondary" onClick={handleApplyCoupon} loading={couponLoading}>
+                  Aplicar
+                </Button>
+              </div>
+              {couponError && <p className="mt-2 text-[11px] text-rose-500">{couponError}</p>}
+            </div>
+          )}
         </aside>
       </div>
     </div>

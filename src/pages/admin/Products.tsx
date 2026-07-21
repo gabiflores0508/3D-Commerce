@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Edit, Plus, Search, Trash2 } from 'lucide-react';
+import { Download, Edit, FileSpreadsheet, Plus, Search, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAdminDataStore } from '@/store/useAdminDataStore';
 import { Button } from '@/components/ui/Button';
@@ -8,10 +8,13 @@ import { Input, Select } from '@/components/ui/Input';
 import { formatBRL } from '@/utils/price';
 import { Modal } from '@/components/ui/Modal';
 import { useSEO } from '@/utils/seo';
+import { exportProductsXlsx, downloadProductTemplate } from '@/utils/productExcel';
+import { ProductImportModal } from '@/components/admin/ProductImportModal';
 
 export default function Products() {
   useSEO('Admin Produtos');
-  const { products, categories, removeProduct, updateProduct } = useAdminDataStore();
+  const { products, categories, removeProduct, updateProduct, refresh } = useAdminDataStore();
+  const [importOpen, setImportOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
@@ -49,9 +52,20 @@ export default function Products() {
           <h1 className="text-2xl font-bold">Produtos</h1>
           <p className="text-sm text-ink-mute">{filtered.length} produto(s)</p>
         </div>
-        <Link to="/admin/produtos/novo" className="btn-primary">
-          <Plus className="h-4 w-4" /> Novo produto
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => exportProductsXlsx(products, categories)} disabled={products.length === 0}>
+            <Download className="h-4 w-4" /> Exportar Excel
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" /> Importar Excel
+          </Button>
+          <Button variant="ghost" size="sm" onClick={downloadProductTemplate}>
+            <FileSpreadsheet className="h-4 w-4" /> Baixar modelo
+          </Button>
+          <Link to="/admin/produtos/novo" className="btn-primary">
+            <Plus className="h-4 w-4" /> Novo produto
+          </Link>
+        </div>
       </header>
 
       {lowStockOnly && (
@@ -142,6 +156,14 @@ export default function Products() {
           </tbody>
         </table>
       </div>
+
+      <ProductImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        products={products}
+        categories={categories}
+        onDone={() => refresh()}
+      />
 
       <Modal open={!!confirm} onClose={() => setConfirm(null)} title="Remover produto?">
         <p className="text-sm text-ink-mute">Essa ação não pode ser desfeita.</p>
